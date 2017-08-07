@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface domain="my-project">
+  <template class="MyProjectGUIMainWindow" parent="GtkApplicationWindow">
+    <property name="can_focus">False</property>
+    <child>
+      <object class="GtkToggleButton" id="toggle_button">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Hello, world!</property>
+      </object>
+    </child>
+  </template>
+</interface>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<schemalist>
+  <schema path="/com/github/felipe-lavratti/vala-unittests-cmake/" id="com.github.felipe-lavratti.vala-unittests-cmake">
+    <key name="active" type="b">
+      <default>false</default>
+      <summary>Whether the button is active</summary>
+      <description>
+        If enabled, the button in the GUI will be active.  The button
+        doesn't actually do anything; it's just to provide an example.
+      </description>
+    </key>
+  </schema>
+</schemalist>
