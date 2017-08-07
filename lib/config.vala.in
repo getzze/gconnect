@@ -1,4 +1,4 @@
-namespace Gconnect.Config {
+namespace Core.Config {
     public const string BUILD_VERSION = "@GCONNECT_VERSION_MAJOR@.@GCONNECT_VERSION_MINOR@.@GCONNECT_VERSION_REVISION@";
     public const string PACKAGE_SUFFIX = "@GCONNECT_VERSION_API@";
 }

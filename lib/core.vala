@@ -1,6 +1,6 @@
-[CCode (gir_namespace = "MyProject", gir_version = "1.0")]
-namespace MyProject {
-    public class MyClass : Object {
+[CCode (gir_namespace = "Gconnect", gir_version = "1.0")]
+namespace Core {
+    public class Core : Object {
         public int fooed {
             public get; public set; default = 0;
         }
