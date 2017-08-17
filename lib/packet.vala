@@ -23,44 +23,59 @@ using Json;
 // using DeviceManager;
 // using Config;
 
-namespace NetworkProtocol {
-    const string PACKAGE_TYPE_IDENTITY = "kdeconnect.identity";
-    const string PACKAGE_TYPE_PAIR = "kdeconnect.pair";
+namespace Gconnect.NetworkProtocol {
+    const string PACKET_TYPE_IDENTITY = "kdeconnect.identity";
+    const string PACKET_TYPE_PAIR = "kdeconnect.pair";
+    const string PACKET_TYPE_ENCRYPTED = "kdeconnect.encrypted";
     const int PROTOCOL_VERSION = 7;
 
+    public errordomain PacketError {
+        MALFORMED
+    }
+
     public class Packet: GLib.Object {
+        
+        public int64 id { get; private set; }
+        public string packet_type { get; private set; }
+        public Json.Object body { get; private set; }
+        public uint64 payload_size { get; private set; }
+        private Json.Object payload_transfer_info { get; set; }
 
-        public unowned int64 id { get; private set; }
-        public unowned string type { get; private set; }
-        public unowned Json.Object body { get; private set; }
-        public unowned Json.Object payload_transfer_info { get; private set; }
-        public unowned uint64 payload_size { get; private set; }
-
-        public Packet (const string type, const Json.Object body = {}, const string id = 0) {
+        public Packet (string type, int64 id = 0 ) {
             if (id==0) {
-                this.id = get_real_time() / 1000;
-            } else {
-                this.id = id;
+                id = get_real_time() / 1000;
             }
-            this.type = type;
-            this.body = body;
-
+            this.id = id;
+            this.packet_type = type;
+            this.body = new Json.Object();
+            
             this.payload_size = 0;
-            this.payload_transfer_info = {};
+            this.payload_transfer_info = new Json.Object();
 //             this.payload = {};
         }
 
-        public static Packet new_identity_packet() {
-            var config = Config.Config.instance();
-            var np = new Packet(PACKAGE_TYPE_IDENTITY);
-            np.set<string>("deviceId", config->deviceId());
-            np.set<string>("deviceName", config->name());
-            np.set<string>("deviceType", config->deviceType());
-            np.set<int>("protocolVersion",  PROTOCOL_VERSION);
-            np.set<string[]>("incomingCapabilities", PluginLoader::instance()->incomingCapabilities());
-            np.set<string[]>("outgoingCapabilities", PluginLoader::instance()->outgoingCapabilities());
+        public Packet.withbody (string type, owned Json.Object body, int64 id = 0) {
+            this(type, id);
+            this.body = (owned)body;
+        }
 
-            return np;
+        public Packet.identity() {
+            var config = Config.Config.instance();
+            this(PACKET_TYPE_IDENTITY);
+            this.set_string("deviceId",   config.device_id());
+            this.set_string("deviceName", config.get_name());
+            this.set_string("deviceType", config.device_type());
+            this.set_int("protocolVersion",  PROTOCOL_VERSION);
+            var pm = Plugin.PluginManager.instance();
+            this.set_strv("incomingCapabilities", pm.incoming_capabilities);
+            this.set_strv("outgoingCapabilities", pm.outgoing_capabilities);
+
+//             this.set_string("deviceId", "testId");
+//             this.set_string("deviceName", "testName");
+//             this.set_string("deviceType", "testType");
+//             this.set_int("protocolVersion",  PROTOCOL_VERSION);
+//             this.set_string("incomingCapabilities", "incoming");
+//             this.set_string("outgoingCapabilities", "outgoing");
         }
 
         public static Packet? unserialize(string data) {
@@ -76,32 +91,33 @@ namespace NetworkProtocol {
                 // object needs to have these fields
                 string[] required_members = {"type", "id", "body"};
                 foreach (string m in required_members) {
-                    if (root_obj.has_member(m) == false)
+                    if (root_obj.has_member(m) == false) {
                         throw new PacketError.MALFORMED(@"Missing $m member");
+                    }
                 }
 
                 string type = root_obj.get_string_member("type");
                 int64 id = root_obj.get_int_member("id");
                 Json.Object body = root_obj.get_object_member("body");
 
-                vdebug("packet type: %s", type);
+                debug("Packet type: %s", type);
 
-                return new Packet(type, body, id);
+                return new Packet.withbody(type, body, id);
             } catch (Error e) {
-                message("failed to parse message: \'%s\', error: %s",
+                message("Failed to parse message: \'%s\', error: %s",
                         data, e.message);
             }
             return null;
         }
-
+        
         public string serialize() {
             var gen = new Json.Generator();
             // root node
             var root = new Json.Node(Json.NodeType.OBJECT);
             var root_obj = new Json.Object();
-            root_obj.set_string_member("type", pkt_type);
-            root_obj.set_int_member("id", id);
-            root_obj.set_object_member("body", body);
+            root_obj.set_string_member("type", this.packet_type);
+            root_obj.set_int_member("id", this.id);
+            root_obj.set_object_member("body", this.body);
             root.set_object(root_obj);
 
             gen.set_root(root);
@@ -111,26 +127,83 @@ namespace NetworkProtocol {
             return data;
         }
 
-        public bool has(string field) {
+        public string to_string() {
+            return this.serialize();
+        }
+
+        public bool has_field(string field) {
             return this.body.has_member(field);
         }
 
-        public T get<T>(string field, const T default = (T){}) {
-            if (this.has<T>(field)) {
-                unowned Json.Node node = this.body.get_member(field);
-                if (T is node.get_value_type()) {
-                    return (T)node.get_value();
-                }
-            }
-            return (T)default;
+        public void remove_field(string field) {
+            this.body.remove_member(field);
         }
 
-        public void set<T>(string field, T @value) {
-            unowned Json.Node node = new Json.Node();
-            node.set_value(@value);
-            this.body.set_member(field, (owned) node);
+        public bool get_bool(string field) {
+            return this.body.get_boolean_member(field);
         }
-    };
-        
-    
+
+        public int get_int(string field) {
+            return (int)this.body.get_int_member(field);
+        }
+
+        public double get_double(string field) {
+            return this.body.get_double_member(field);
+        }
+
+        public string get_string(string field) {
+            return this.body.get_string_member(field);
+        }
+
+        public string[] get_strv(string field) {
+            GLib.List<Json.Node> lst = this.body.get_array_member(field).get_elements();
+            string[] ret = {};
+            string s;
+            foreach (var n in lst) {
+                s = n.get_string();
+                ret += s;
+            }
+            return ret;
+        }
+
+        public unowned Json.Object? get_object(string field) {
+            return this.body.get_object_member(field);
+        }
+
+        public unowned Json.Array? get_array(string field) {
+            return this.body.get_array_member(field);
+        }
+
+        public void set_bool(string field, bool @value) {
+             this.body.set_boolean_member(field, @value);
+        }
+
+        public void set_int(string field, int64 @value) {
+             this.body.set_int_member(field, @value);
+        }
+
+        public void set_double(string field, double @value) {
+             this.body.set_double_member(field, @value);
+        }
+
+        public void set_string(string field, string @value) {
+            this.body.set_string_member(field, @value);
+        }
+
+        public void set_strv(string field, string[] @value) {
+            var arr = new Json.Array();
+            foreach (var s in @value) {
+                arr.add_string_element(s);
+            }
+            this.body.set_array_member(field, (owned)arr);
+        }
+
+        public void set_object(string field, owned Json.Object @value) {
+            this.body.set_object_member(field, @value);
+        }
+
+        public void set_array(string field, owned Json.Array @value) {
+            this.body.set_array_member(field, @value);
+        }
+    }
 }

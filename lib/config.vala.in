@@ -1,4 +1,117 @@
-namespace Core.Config {
+namespace Gconnect.Config {
     public const string BUILD_VERSION = "@GCONNECT_VERSION_MAJOR@.@GCONNECT_VERSION_MINOR@.@GCONNECT_VERSION_REVISION@";
     public const string PACKAGE_SUFFIX = "@GCONNECT_VERSION_API@";
+    public const string APP_NAME = "@PROJECT_NAME@";
+
+    public class Config : Object {
+        private GLib.Settings settings;
+        private GLib.Settings device_settings;
+        
+//         public Crypt crypt { get; private set; default = null; }
+
+
+        private Config() {
+            init_user_dirs();
+
+// 			this.crypt = init_crypto();
+
+            this.settings = new Settings("org.gconnect");
+            this.device_settings = new Settings("org.gconnect.paired-devices");
+            
+        }
+
+        public static Config instance() {
+            var c = new Config();
+            return c;
+        }
+
+        public string get_name () {
+            return this.settings.get_string("name");
+        }
+
+        public void set_name(string @value) {
+            this.settings.set_string("name", @value);
+        }
+
+        public string[] get_paired_devices() {
+            return this.settings.get_strv("paired-devices");
+        }       
+
+        public string[] get_auto_pair_devices() {
+            return this.settings.get_strv("auto-pair-devices");
+        }       
+
+        public string device_id() {
+            string host_name = Environment.get_host_name();
+            string user = Environment.get_user_name();
+            return @"gconnect:$user@$host_name";
+        }       
+        
+        public string device_type() {
+            return "desktop";
+        }
+
+        public void add_paired_device (string id, DeviceManager.DeviceInfo info) {
+            var paired = new Gee.ArrayList<string>.wrap(this.get_auto_pair_devices());
+            
+            bool res = false;
+            if (!paired.contains(id)) {
+                res = paired.add(id);
+                // TODO : add info
+            }
+            if (res) {
+                this.settings.set_strv("paired-devices", paired.to_array());
+            } else {
+                message("Could not add id %s to the paired devices list: %s", 
+                        id, string.joinv(";", paired.to_array()));
+            }
+        }
+        
+        public void remove_paired_device (string id) {
+            var paired = new Gee.ArrayList<string>.wrap(this.get_auto_pair_devices());
+            bool res = paired.remove(id);
+            if (res) {
+                this.settings.set_strv("paired-devices", paired.to_array());
+            } else {
+                info("Could not remove id %s from the paired devices list: %s",
+                        id, string.joinv(";", paired.to_array()));
+            }
+        }
+        
+        public DeviceManager.DeviceInfo get_paired_device(string id) {
+            DeviceManager.DeviceInfo info = {};
+            // TODO: add cache
+            
+            return info;
+        }
+        
+        public static string get_storage_dir() {
+            return Path.build_filename(Environment.get_user_data_dir(),
+                                    APP_NAME);
+        }
+
+        public static string get_config_dir() {
+            return Path.build_filename(Environment.get_user_config_dir(),
+                                    APP_NAME);
+        }
+
+        public static string get_cache_dir() {
+            return Path.build_filename(Environment.get_user_cache_dir(),
+                                    APP_NAME);
+        }
+
+        public static string get_plugins_dir() {
+            return Path.build_filename(get_storage_dir(), "/plugins");
+        }
+
+        private static void init_user_dirs() {
+            DirUtils.create_with_parents(get_storage_dir(), 0700);
+            DirUtils.create_with_parents(get_config_dir(), 0700);
+        }
+
+//         private static Crypt init_crypto() {
+//             string key_path = get_storage_dir() + "/private.pem";
+//             return new Crypt.for_key_path(key_path);
+//         }
+    }
 }

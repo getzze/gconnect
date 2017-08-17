@@ -1,0 +1,36 @@
+<schemalist>
+  <schema id="org.gconnect" path="/apps/gconnect/" gettext-domain="gconnect">
+
+    <key name="name" type="s">
+      <default>"gconnect"</default>
+      <summary>Local device name</summary>
+      <description>
+        Name of the local gconnect server
+      </description>
+    </key>
+
+    <key name="paired-devices" type="as">
+      <default>[]</default>
+      <summary>Array of paired device ids</summary>
+      <description>
+        An array of ids (string) of the trusted (paired) devices.
+      </description>
+    </key>
+
+    <key name="auto-pair-devices" type="as">
+      <default>[]</default>
+      <summary>Array of auto-pair device ids</summary>
+      <description>
+        An array of device ids (string) with who the pairing is automatically accepted.
+      </description>
+    </key>
+
+    <child name="devices" schema="org.gconnect.paired-devices"/>
+  </schema>
+ 
+  <schema id="org.gconnect.paired-devices" path="/apps/gconnect/devices/">
+  </schema>    
+    
+
+  </schema>
+</schemalist> 

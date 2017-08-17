@@ -23,10 +23,11 @@ using Gee;
 // using DeviceManager;
 // using Config;
 
-namespace core {
+namespace Gconnect.Core {
     
-    struct CorePrivate
-    {
+    Core __instance = null;
+
+    struct CorePrivateDict {
         // Connections
         public HashSet<Connection.LinkProvider> link_providers;
         
@@ -35,31 +36,33 @@ namespace core {
 
         // Discovery modes
         public HashSet<string> discovery_mode_acquisitions;
-    };
+    }
 
     [DBus(name = "gconnect.core")]
     public class Core: GLib.Object {
         private static Core? _instance = null;
         
-        private CorePrivate _dict;
+        private CorePrivateDict _dict;
         
-        public signal device_visibility_changed(string id, bool visible);
-        public signal announced_name_changed(string name);
-        public signal pairing_requests_changed(bool has_requests);
-        public signal device_added(string id);
-        public signal device_removed(string id);
+        public signal void device_visibility_changed(string id, bool visible);
+        public signal void announced_name_changed(string name);
+        public signal void pairing_requests_changed(bool has_requests);
+        public signal void device_added(string id);
+        public signal void device_removed(string id);
 
         // Virtual methods, can be overridden because it requires user input.
         // For a CLI daemon, use libinput. For a GUI; use notifications.
-        public virtual void ask_pairing_confirmation(DeviceManager.Device device) {
-            var list = Config.Config.instance().auto_pair_devices();
+        public virtual void ask_pairing_confirmation(string device_id) {
+            var list = Config.Config.instance().get_auto_pair_devices();
             bool trusted = false;
-            foreach (string device_id in list) {
-                if (device.id==device_id) {
+            foreach (string id in list) {
+                if (id==device_id) {
                     trusted = true;
                     break;
                 }
             }
+            // Accept/reject pairing
+            DeviceManager.Device device = get_device(device_id);
             if (trusted) {
                 debug("Device id found in auto-pair device list. Accept pairing with device %s (id:%s)", device.name, device.id);
                 device.accept_pairing();
@@ -67,71 +70,79 @@ namespace core {
                 debug("Device id not found in auto-pair device list. Reject pairing with device %s (id:%s)", device.name, device.id);
                 device.reject_pairing();
             }
-        };
+        }
 
         public virtual void report_error(string title, string description) {
             error("A core error was reported: %s -> %s", title, description);
         }
 
         
-        public Core (GLib.Object parent, bool test) {
-            this._dict = new CorePrivate;
+        public Core (bool test = true) {
             // Load backends
             if (test) {
-                this._dict.link_providers.add(new Connection.LoopbackLinkProvider());
+                this._dict.link_providers.add(new LoopbackConnection.LoopbackLinkProvider());
             } else {
-                this._dict.link_providers.add(new Connection.LanLinkProvider());
+                #if GCONNECT_LAN
+                    this._dict.link_providers.add(new Connection.LanLinkProvider());
+                #endif
                 #if GCONNECT_BLUETOOTH
                     this._dict.link_providers.add(new Connection.BluetoothLinkProvider());
                 #endif
             }
             
             // Get known paired devices
-            var list = Config.Config.instance().paired_devices();
+            var list = Config.Config.instance().get_paired_devices();
             foreach (string device_id in list) {
-                this.add_device(new DeviceManager.Device(this, device_id));
+                this.add_device(new DeviceManager.Device.from_id(this, device_id));
             }
 
             // Discover new devices
             foreach (var lp in this._dict.link_providers) {
-                lp.onConnectionReceived.connect(this.on_new_device_link);
+                lp.on_connection_received.connect(this.on_new_device_link);
                 lp.on_start();
             }
 
             debug("Gconnect core started.");
         }
         
-        public static Core? instance() {
-            if (Core._instance == null) {
+        public static Core instance() {
+            if (__instance == null) {
                 var core = new Core();
-                Core._instance = core;
+                __instance = core;
             }
-            return Core._instance;
+            return __instance;
+//             if (Core._instance == null) {
+//                 var core = new Core();
+//                 Core._instance = core;
+//             }
+//             return Core._instance;
         }
 
+        [Callback]
         public void acquire_discovery_mode(string key) {
             bool old_state = this._dict.discovery_mode_acquisitions.size==0;
 
             this._dict.discovery_mode_acquisitions.add(key);
 
-            if (old_state != this._dict.discovery_mode_acquisitions.size==0)) {
+            if (old_state != (this._dict.discovery_mode_acquisitions.size==0) ) {
                 this.force_on_network_change();
             }
         }
 
+        [Callback]
         public void release_discovery_mode(string key) {
             bool old_state = this._dict.discovery_mode_acquisitions.size==0;
 
             this._dict.discovery_mode_acquisitions.remove(key);
 
-            if (old_state != this._dict.discovery_mode_acquisitions.size==0)) {
+            if (old_state != (this._dict.discovery_mode_acquisitions.size==0) ) {
                 this.clean_devices();
             }
         }
         
         private void remove_device(DeviceManager.Device device) {
             string id = device.id;
-            this._dict.devices.remove(device.id);
+            this._dict.devices.unset(device.id);
             this.device_removed(id);
         }
 
@@ -148,6 +159,7 @@ namespace core {
             }
         }
         
+        [Callback]
         public void force_on_network_change() {
             debug("Sending onNetworkChange to %d LinkProviders.", this._dict.link_providers.size);
             foreach (var lp in this._dict.link_providers) {
@@ -155,6 +167,7 @@ namespace core {
             }
         }
 
+        [DBus (visible = false)]
         public DeviceManager.Device? get_device(string device_id) {
             foreach (var device in this._dict.devices.values) {
                 if (device.id == device_id) {
@@ -164,6 +177,7 @@ namespace core {
             return null;
         }
 
+        [Callback]
         public string[] devices(bool only_reachable, bool only_paired) {
             string[] ret = {};
             foreach (var device in this._dict.devices.values) {
@@ -174,34 +188,35 @@ namespace core {
             return ret;
         }
 
-        private void on_new_device_link(Packet identity_packet, Connection.DeviceLink dl) {
-            string id = identity_packet.get<string>("device_id");
-
-            debug("Device discovered %s via %s", id, dl.provider().name());
+        [Callback]
+        private void on_new_device_link(NetworkProtocol.Packet identity_packet, Connection.DeviceLink dl) {
+            string id = identity_packet.get_string("device_id");
+            string name = identity_packet.get_string("device_name");
+            DeviceManager.Device device = null;
+            debug("Device discovered %s via %s", id, dl.provider().name);
 
             if (this._dict.devices.has_key(id)) {
-                debug("It is a known device: %s", identity_package.get<string>("device_name"));
-                var device = this._dict.devices[id];
+                debug("It is a known device: %s", name);
+                device = this._dict.devices[id];
                 bool was_reachable = device.is_reachable();
-                device.add_link(identity_package, dl);
+                device.add_link(identity_packet, dl);
                 if (!was_reachable) {
                     this.device_visibility_changed(id, true);
                 }
             } else {
-                debug("It is a new device: %s", identity_package.get<string>("device_name"));
-                var device = new Device(this, identity_package, dl);
+                debug("It is a new device: %s", name);
+                device = new DeviceManager.Device.from_link(this, identity_packet, dl);
 
-                //we discard the connections that we created but it's not paired.
-                if (!is_discovering_devices() && !device.is_paired() && !dl.link_should_be_kept_alive()) {
-                    delete device;
-                } else {
+                // we discard the connections that we created but it's not paired.
+                if (is_discovering_devices() || device.is_paired() || dl.link_should_be_kept_alive()) {
                     this.add_device(device);
                 }
             }
         }
 
+        [Callback]
         private void on_device_status_changed(DeviceManager.Device device) {
-            debug("Device %s status changed. Reachable: %s. Paired: %s", device.name, (device.is_reachable())?"true":"false", (device->is_paired())?"true":"false");
+            debug("Device %s status changed. Reachable: %s. Paired: %s", device.name, (device.is_reachable())?"true":"false", (device.is_paired())?"true":"false");
 
             if (!device.is_reachable() && !device.is_paired()) {
                 debug("Removing device: %s", device.name);
@@ -213,14 +228,14 @@ namespace core {
         }
 
         public void set_announced_name(string name) {
-            debug("Change announcing name.";
+            debug("Change announcing name.");
             Config.Config.instance().set_name(name);
             this.force_on_network_change();
             this.announced_name_changed(name);
         }
 
         public string get_announced_name() {
-            return Config.Config.instance().name();
+            return Config.Config.instance().get_name();
         }
 
         private bool is_discovering_devices()
@@ -228,23 +243,24 @@ namespace core {
             return !(this._dict.discovery_mode_acquisitions.size==0);
         }
 
+        [Callback]
         public string device_id_by_name(string name) {
             foreach (var device in this._dict.devices.values) {
                 if (device.name == name && device.is_paired()) {
                     return device.id;
                 }
             }
-            return {};
+            return "";
         }
 
         private void add_device(DeviceManager.Device device) {
             string id = device.id;
-            device.reachable_changed.connect((d) => this.on_device_status_changed(d));
-            device.paired_changed.connect((d) => this.on_device_status_changed(d));
-            device.has_pairing_requests_changed.connect(this.pairing_requests_changed);
+            device.reachable_changed.connect((d, b) => this.on_device_status_changed(d));
+            device.paired_changed.connect((d, b) => this.on_device_status_changed(d));
+            device.has_pairing_requests_changed.connect((d, has_requests) => this.pairing_requests_changed(has_requests));
             device.has_pairing_requests_changed.connect((d, has_requests) => {
                 if (has_requests) {
-                    this.ask_pairing_confirmation(d);
+                    this.ask_pairing_confirmation(d.id);
                 }
             });
             this._dict.devices[id] = device;
@@ -265,5 +281,6 @@ namespace core {
         public string self_id() {
             return Config.Config.instance().device_id();
         }
+    }
 }
 

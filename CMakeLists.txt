@@ -74,14 +74,23 @@ pkg_check_modules(GOBJECT REQUIRED gobject-2.0)
 pkg_check_modules(GIO REQUIRED gio-2.0)
 pkg_check_modules(GTHREAD REQUIRED gthread-2.0)
 pkg_check_modules(GEE REQUIRED gee-0.8)
+pkg_check_modules(JSON-GLIB REQUIRED json-glib-1.0)
+pkg_check_modules(LIBPEAS REQUIRED libpeas-1.0)
 
-include_directories(${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+include_directories(
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    ${GEE_INCLUDE_DIRS}
+    ${JSON-GLIB_INCLUDE_DIRS}
+    ${LIBPEAS_INCLUDE_DIRS}
+)
 
 set(CFLAGS
 	${GOBJECT_CFLAGS} ${GOBJECT_CFLAGS_OTHER}
 	${GIO_CFLAGS} ${GIO_CFLAGS_OTHER}
 	${GTHREAD_CFLAGS} ${GTHREAD_CFLAGS_OTHER}
 	${GEE_CFLAGS} ${GEE_CFLAGS_OTHER}
+	${JSON-GLIB} ${JSON-GLIB_CFLAGS_OTHER}
+	${LIBPEAS_CFLAGS} ${LIBPEAS_CFLAGS_OTHER}
 )
 add_definitions(${CFLAGS})
 
@@ -104,6 +113,8 @@ set(LIBS
 	${GIO_LIBRARIES}
 	${GTHREAD_LIBRARIES}
 	${GEE_LIBRARIES}
+	${JSON-GLIB_LIBRARIES}
+	${LIBPEAS_LIBRARIES}
 )
 link_libraries(${LIBS})
 
@@ -112,6 +123,8 @@ set(LIB_PATHS
 	${GIO_LIBRARY_DIRS}
 	${GTHREAD_LIBRARY_DIRS}
 	${GEE_LIBRARY_DIRS}
+	${JSON-GLIB_LIBRARY_DIRS}
+	${LIBPEAS_LIBRARY_DIRS}
 )
 link_directories(${LIB_PATHS})
 
@@ -136,7 +149,7 @@ set(GCONNECT_GIR_NAME "Gconnect-${GCONNECT_VERSION_API}")
 set (LIBRARY_PATH "lib")
 
 add_subdirectory(lib)
-add_subdirectory(cli)
-add_subdirectory(gui)
-add_subdirectory(tests)
-add_subdirectory(po)
+# add_subdirectory(cli)
+# add_subdirectory(gui)
+# add_subdirectory(tests)
+# add_subdirectory(po)

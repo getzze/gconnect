@@ -19,7 +19,13 @@ set(GCONNECT_HEADER ${PROJECT_NAME})
 # These are the Vala sources you want to build your library out of.
 set(GCONNECT_VALA_SOURCES
     "${CMAKE_CURRENT_BINARY_DIR}/config.vala"
-    core.vala)
+    packet.vala
+    pluginmanager.vala
+    devicemanager.vala
+    connection.vala
+    channels/loopback/loopbackconnection.vala
+    core.vala
+)
 
 # Any dependencies.  Note that it isn't actually necessary to add
 # glib-2.0 or gobject-2.0 (it is done implicitly), but for this
@@ -30,7 +36,6 @@ set(GCONNECT_VALA_PACKAGES
     gio-2.0
     libpeas-1.0
 	json-glib-1.0
-	libpeas-1.0
 	gee-0.8
 	libnotify
 	gdk-3.0

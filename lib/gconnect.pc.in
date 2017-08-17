@@ -9,4 +9,4 @@ Name: @PACKAGE_NAME@
 Description: KDEConnect protocol implementation in Vala
 Version: @PACKAGE_VERSION@
 Libs: -L${libdir} -lgconnect-@GCONNECT_VERSION_API@
-Cflags: -I${includedir}/gconnect-@MY_PROJECT_VERSION_API@
+Cflags: -I${includedir}/gconnect-@GCONNECT_VERSION_API@
