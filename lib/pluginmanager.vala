@@ -26,9 +26,9 @@ using Gee;
 
 namespace Gconnect.Plugin {
     public interface Plugin : GLib.Object {
-        public abstract string name { get; construct set; }
-        public abstract HashSet<string> outgoing_capabilities { get; construct set; }
-        public abstract HashSet<string> incoming_capabilities { get; construct set; }
+        public abstract string name { get; set; }
+        public abstract HashSet<string> outgoing_capabilities { get; set; }
+        public abstract HashSet<string> incoming_capabilities { get; set; }
         /* Unowned (weak) reference to the Device */
         public abstract unowned GLib.Object device { get; construct set; }
 //         public abstract unowned DeviceManager.Device device { get; construct set; }
@@ -90,7 +90,8 @@ namespace Gconnect.Plugin {
             private set {}
         }
 
-        private Peas.Engine engine { get; private set;}
+        [DBus (visible = false)]
+        public Peas.Engine engine { get; private set;}
 
         public PluginManager() {
             /* Get the default engine */

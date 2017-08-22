@@ -118,6 +118,7 @@ namespace Gconnect.DeviceManager {
 
         /* Public Methods */
         public string dbus_path() { return "/modules/gconnect/devices/"+id; }
+        
         //Add and remove links
         public void add_link(NetworkProtocol.Packet identity, Connection.DeviceLink dl)
                 requires (!_device_links.contains(dl))
@@ -261,7 +262,29 @@ namespace Gconnect.DeviceManager {
         }
         
         [Callback]
-        public void reload_plugins() {} //from kconf
+        public void reload_plugins() {
+            var engine = Plugin.PluginManager.instance().engine;
+            Type tt = typeof(Plugin.Plugin);
+            message("Extension set for interface: %s (%s)", tt.name(), tt.is_interface().to_string());
+            _extension_set = new Peas.ExtensionSet(engine, typeof(Plugin.Plugin), "device", this);
+            _extension_set.@foreach((ext_set, info, extension) => {
+                (extension as Plugin.Plugin).name = info.get_name();
+                var out_cap = new HashSet<string>();
+                out_cap.add_all_array(info.get_external_data("X-Outgoing-Capabilities").split(","));
+                (extension as Plugin.Plugin).outgoing_capabilities = out_cap;
+                var in_cap = new HashSet<string>();
+                in_cap.add_all_array(info.get_external_data("X-Incoming-Capabilities").split(","));
+                (extension as Plugin.Plugin).incoming_capabilities = in_cap;
+            });
+
+            _extension_set.extension_added.connect((info, extension) => {
+                debug("Extension added for interface %s from plugin: %s", typeof(Plugin.Plugin).name(), info.get_name() );
+                (extension as Plugin.Plugin).activate();
+            });
+            _extension_set.extension_removed.connect((info, extension) => {
+                (extension as Plugin.Plugin).deactivate();
+            });
+        }
 
         [Callback]
         public void accept_pairing() {
@@ -308,13 +331,17 @@ namespace Gconnect.DeviceManager {
             requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_PAIR)
         {
             if (is_paired()) {
-//                 const QList<KdeConnectPlugin*> plugins = m_pluginsByIncomingCapability.values(np.type());
-//                 if (plugins.isEmpty()) {
-//                     qWarning() << "discarding unsupported packet" << np.type() << "for" << name();
-//                 }
-//                 for (KdeConnectPlugin* plugin : plugins) {
-//                     plugin->receivePackage(np);
-//                 }
+                int treated = 0;
+                // TODO: use a dictionary with incoming-capabilities instead
+                _extension_set.@foreach((ext_set, info, extension) => {
+                    if (pkt.packet_type in (extension as Plugin.Plugin).incoming_capabilities) {
+                        (extension as Plugin.Plugin).receive(pkt);
+                        treated += 1;
+                    }
+                });
+                if (treated == 0) {
+                    warning("Discarding unsupported packet %s for device %s.", pkt.packet_type, this.name);
+                }
             } else {
                 debug("Device %s not paired, ignoring packet %s", info.name, pkt.packet_type);
                 unpair();
