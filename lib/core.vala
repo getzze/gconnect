@@ -229,13 +229,13 @@ namespace Gconnect.Core {
 
         public void set_announced_name(string name) {
             debug("Change announcing name.");
-            Config.Config.instance().set_name(name);
+            Config.Config.instance().device_name = name;
             this.force_on_network_change();
             this.announced_name_changed(name);
         }
 
         public string get_announced_name() {
-            return Config.Config.instance().get_name();
+            return Config.Config.instance().device_name;
         }
 
         private bool is_discovering_devices()
@@ -279,7 +279,7 @@ namespace Gconnect.Core {
         }
 
         public string self_id() {
-            return Config.Config.instance().device_id();
+            return Config.Config.instance().device_id;
         }
     }
 }

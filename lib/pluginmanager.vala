@@ -27,21 +27,20 @@ using Gee;
 namespace Gconnect.Plugin {
     public interface Plugin : GLib.Object {
         public abstract string name { get; set; }
-        public abstract HashSet<string> outgoing_capabilities { get; set; }
-        public abstract HashSet<string> incoming_capabilities { get; set; }
+        public abstract string[] outgoing_capabilities { get; set; }
+        public abstract string[] incoming_capabilities { get; set; }
         /* Unowned (weak) reference to the Device */
-        public abstract unowned GLib.Object device { get; construct set; }
-//         public abstract unowned DeviceManager.Device device { get; construct set; }
+//        public abstract unowned GLib.Object device { get; construct set; }
+        public abstract unowned DeviceManager.Device device { get; construct set; }
 
         /* Send a request packet */
-        public virtual bool request(NetworkProtocol.Packet np) {
-            if (!this.outgoing_capabilities.contains(np.packet_type)) {
-                string[] oc = this.outgoing_capabilities.to_array();
-                debug("Plugin %s tried to send an unsupported package type %s. Supported: %s", this.name, np.packet_type, string.joinv(";", oc));
+        public virtual bool request(NetworkProtocol.Packet pkt) {
+            if (!(pkt.packet_type in this.outgoing_capabilities)) {
+                debug("Plugin %s tried to send an unsupported package type %s. Supported: %s",
+                        this.name, pkt.packet_type, string.joinv(";", this.outgoing_capabilities));
                 return false;
             }
-//             return this.device.send_packet(np);
-            return true;
+            return this.device.send_packet(pkt);
         }
 
         /* Treat a received packet */
@@ -57,7 +56,6 @@ namespace Gconnect.Plugin {
         public abstract void deactivate();
     }
 
-    
     [DBus(name = "gconnect.pluginmanager")]
     public class PluginManager : GLib.Object { 
         private static PluginManager _instance = null;

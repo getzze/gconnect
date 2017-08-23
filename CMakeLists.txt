@@ -76,23 +76,64 @@ pkg_check_modules(GTHREAD REQUIRED gthread-2.0)
 pkg_check_modules(GEE REQUIRED gee-0.8)
 pkg_check_modules(JSON-GLIB REQUIRED json-glib-1.0)
 pkg_check_modules(LIBPEAS REQUIRED libpeas-1.0)
+pkg_check_modules(LIBNOTIFY REQUIRED libnotify)
+
+##
+## Libnotify
+##
+#pkg_check_modules (LIBNOTIFY QUIET libnotify)
+#if (LIBNOTIFY_FOUND)
+    #message ("-- libnotify enabled")
+    #set (GLOBAL_VALAC_OPTIONS ${GLOBAL_VALAC_OPTIONS} --define=HAVE_LIBNOTIFY)
+    #set (DEPS_PACKAGES ${DEPS_PACKAGES} libnotify)
+    #set (DEPS_CFLAGS ${DEPS_CFLAGS} ${LIBNOTIFY_CFLAGS})
+    #set (DEPS_LIBRARIES ${DEPS_LIBRARIES} ${LIBNOTIFY_LIBRARIES})
+    #set (DEPS_LIBRARY_DIRS ${DEPS_LIBRARY_DIRS} ${LIBNOTIFY_LIBRARY_DIRS})
+#else ()
+    #message ("-- libnotify disabled")
+#endif ()
+
 
 include_directories(
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
     ${GEE_INCLUDE_DIRS}
     ${JSON-GLIB_INCLUDE_DIRS}
     ${LIBPEAS_INCLUDE_DIRS}
+    ${LIBNOTIFY_INCLUDE_DIRS}
 )
 
-set(CFLAGS
+set(DEPS_CFLAGS
 	${GOBJECT_CFLAGS} ${GOBJECT_CFLAGS_OTHER}
 	${GIO_CFLAGS} ${GIO_CFLAGS_OTHER}
 	${GTHREAD_CFLAGS} ${GTHREAD_CFLAGS_OTHER}
 	${GEE_CFLAGS} ${GEE_CFLAGS_OTHER}
 	${JSON-GLIB} ${JSON-GLIB_CFLAGS_OTHER}
 	${LIBPEAS_CFLAGS} ${LIBPEAS_CFLAGS_OTHER}
+	${LIBNOTIFY_CFLAGS} ${LIBNOTIFY_CFLAGS_OTHER}
 )
-add_definitions(${CFLAGS})
+add_definitions(${DEPS_CFLAGS})
+
+set(DEPS_LIBS
+	${GOBJECT_LIBRARIES}
+	${GIO_LIBRARIES}
+	${GTHREAD_LIBRARIES}
+	${GEE_LIBRARIES}
+	${JSON-GLIB_LIBRARIES}
+	${LIBPEAS_LIBRARIES}
+	${LIBNOTIFY_LIBRARIES}
+)
+link_libraries(${DEPS_LIBS})
+
+set(DEPS_LIB_PATHS
+	${GOBJECT_LIBRARY_DIRS}
+	${GIO_LIBRARY_DIRS}
+	${GTHREAD_LIBRARY_DIRS}
+	${GEE_LIBRARY_DIRS}
+	${JSON-GLIB_LIBRARY_DIRS}
+	${LIBPEAS_LIBRARY_DIRS}
+	${LIBNOTIFY_LIBRARY_DIRS}
+)
+link_directories(${DESP_LIB_PATHS})
 
 # If someone doesn't specify a build type, default to "Debug"
 if(CMAKE_BUILD_TYPE STREQUAL "")
@@ -100,7 +141,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "")
 endif(CMAKE_BUILD_TYPE STREQUAL "")
 
 list(APPEND VALA_COMPILER_FLAGS "--target-glib=2.38")
-list(APPEND VALA_COMPILER_FLAGs_DEBUG "--debug")
+list(APPEND VALA_COMPILER_FLAGS_DEBUG "--debug")
 
 # Lots of perfectly valid Vala code will trigger warnings from the C
 # compiler, almost always false-positives.  This often drowns out
@@ -108,25 +149,16 @@ list(APPEND VALA_COMPILER_FLAGs_DEBUG "--debug")
 include(AddCompilerFlags)
 global_add_compiler_flags(-Wno-incompatible-pointer-types)
 
-set(LIBS
-	${GOBJECT_LIBRARIES}
-	${GIO_LIBRARIES}
-	${GTHREAD_LIBRARIES}
-	${GEE_LIBRARIES}
-	${JSON-GLIB_LIBRARIES}
-	${LIBPEAS_LIBRARIES}
-)
-link_libraries(${LIBS})
 
-set(LIB_PATHS
-	${GOBJECT_LIBRARY_DIRS}
-	${GIO_LIBRARY_DIRS}
-	${GTHREAD_LIBRARY_DIRS}
-	${GEE_LIBRARY_DIRS}
-	${JSON-GLIB_LIBRARY_DIRS}
-	${LIBPEAS_LIBRARY_DIRS}
-)
-link_directories(${LIB_PATHS})
+# Uninstall target
+configure_file (
+    "${CMAKE_SOURCE_DIR}/cmake/Uninstall.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/Uninstall.cmake"
+    IMMEDIATE @ONLY)
+
+add_custom_target (uninstall
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/Uninstall.cmake)
+
 
 # The name of the shared library.  Note that a "lib" prefix will be
 # added automatically on systems where that is the convention.
@@ -149,6 +181,7 @@ set(GCONNECT_GIR_NAME "Gconnect-${GCONNECT_VERSION_API}")
 set (LIBRARY_PATH "lib")
 
 add_subdirectory(lib)
+add_subdirectory(daemon)
 # add_subdirectory(cli)
 # add_subdirectory(gui)
 # add_subdirectory(tests)

@@ -38,6 +38,12 @@ namespace Gconnect.DeviceManager {
         return p1.provider().priority - p2.provider().priority;
     }
     
+    static string[] unique_array(string str_array, string delimiter = ",") {
+        var set_array = new Gee.HashSet<string>();
+        set_array.add_all_array(str_array.split(delimiter));
+        return set_array.to_array();
+    }
+    
     public struct DeviceInfo {
         public string name;
         public string category;
@@ -46,6 +52,7 @@ namespace Gconnect.DeviceManager {
         public string[] outgoing;
     }
     
+    [DBus(name = "gconnect.device")]
     public class Device: GLib.Object {
         /* Private fields */
         private Gee.ArrayList<Connection.DeviceLink> _device_links;
@@ -74,7 +81,7 @@ namespace Gconnect.DeviceManager {
         public Device.from_id(GLib.Object parent, string device_id) {
             this.id = device_id;
             this.info = Config.Config.instance().get_paired_device(this.id);
-
+            
             this.name = info.name;
             this.category = info.category;
 
@@ -120,6 +127,7 @@ namespace Gconnect.DeviceManager {
         public string dbus_path() { return "/modules/gconnect/devices/"+id; }
         
         //Add and remove links
+        [DBus (visible = false)]
         public void add_link(NetworkProtocol.Packet identity, Connection.DeviceLink dl)
                 requires (!_device_links.contains(dl))
         {
@@ -169,6 +177,7 @@ namespace Gconnect.DeviceManager {
             dl.pairing_error.connect((s, m)=> {this.pairing_error(m);});
         }
 
+        [DBus (visible = false)]
         public void remove_link(Connection.DeviceLink dl) {
             _device_links.remove(dl);
 
@@ -220,6 +229,7 @@ namespace Gconnect.DeviceManager {
 //         public string getLocalIpAddress();
 
         [Callback]
+        [DBus (visible = false)]
         public virtual bool send_packet(NetworkProtocol.Packet pkt)
                 requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_PAIR)
                 requires (is_paired())
@@ -269,12 +279,10 @@ namespace Gconnect.DeviceManager {
             _extension_set = new Peas.ExtensionSet(engine, typeof(Plugin.Plugin), "device", this);
             _extension_set.@foreach((ext_set, info, extension) => {
                 (extension as Plugin.Plugin).name = info.get_name();
-                var out_cap = new HashSet<string>();
-                out_cap.add_all_array(info.get_external_data("X-Outgoing-Capabilities").split(","));
-                (extension as Plugin.Plugin).outgoing_capabilities = out_cap;
-                var in_cap = new HashSet<string>();
-                in_cap.add_all_array(info.get_external_data("X-Incoming-Capabilities").split(","));
-                (extension as Plugin.Plugin).incoming_capabilities = in_cap;
+                (extension as Plugin.Plugin).outgoing_capabilities = unique_array(
+                    info.get_external_data("X-Outgoing-Capabilities"));
+                (extension as Plugin.Plugin).incoming_capabilities = unique_array(
+                    info.get_external_data("X-Incoming-Capabilities"));
             });
 
             _extension_set.extension_added.connect((info, extension) => {

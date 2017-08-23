@@ -26,11 +26,62 @@
     </key>
 
     <child name="devices" schema="org.gconnect.paired-devices"/>
-  </schema>
- 
-  <schema id="org.gconnect.paired-devices" path="/apps/gconnect/devices/">
-  </schema>    
-    
 
   </schema>
+  
+  <schema id="org.gconnect.paired-devices" path="/apps/gconnect/devices/">
+    <child name="self" schema="org.gconnect.device"/>
+  </schema>
+
+  <schema id="org.gconnect.device">
+
+    <key name="id" type="s">
+      <default>""</default>
+      <summary>Device Id</summary>
+      <description>
+        Device Id
+      </description>
+    </key>
+
+    <key name="name" type="s">
+      <default>""</default>
+      <summary>Device name</summary>
+      <description>
+        Device name
+      </description>
+    </key>
+
+    <key name="type" type="s">
+      <default>""</default>
+      <summary>Device type</summary>
+      <description>
+        Device type (desktop, mobile, ...)
+      </description>
+    </key>
+
+    <key name="protocol-version" type="i">
+      <default>0</default>
+      <summary>Device type</summary>
+      <description>
+        Device type (desktop, mobile, ...)
+      </description>
+    </key>
+
+    <key name="incoming-capabilities" type="as">
+      <default>[]</default>
+      <summary>Array of incoming capabilities</summary>
+      <description>
+        An array of the incoming capabilities of the device
+      </description>
+    </key>
+
+    <key name="outgoing-capabilities" type="as">
+      <default>[]</default>
+      <summary>Array of outgoing capabilities</summary>
+      <description>
+        An array of the outgoing capabilities of the device
+      </description>
+    </key>
+      
+  </schema>    
 </schemalist> 

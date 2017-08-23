@@ -2,6 +2,10 @@
 #
 # Library Target: linked against executable and tests.
 
+
+# The library short description
+set(GCONNECT_SHORT_DESCRIPTION "KDEConnect protocol implementation in Vala")
+
 # Generate a config.vala file, which can be used for version
 # information and feature detection.
 configure_file(
@@ -32,14 +36,13 @@ set(GCONNECT_VALA_SOURCES
 # template project we don't actually depend on anything else, so we
 # added it for illustrative purposes.
 set(GCONNECT_VALA_PACKAGES
-    glib-2.0
-    gio-2.0
     libpeas-1.0
 	json-glib-1.0
 	gee-0.8
-	libnotify
-	gdk-3.0
-    gobject-2.0)
+	#libnotify
+	#gdk-3.0
+    #gio-2.0
+)
 
 # Compile Vala -> C
 vala_precompile_target(
@@ -51,6 +54,17 @@ vala_precompile_target(
     HEADER "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.h"
     ${GCONNECT_VALA_SOURCES})
 
+# Write list of dependency file (Makefile style)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.deps" "" )
+foreach(var ${GCONNECT_VALA_PACKAGES})
+    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.deps"
+        "${var}\n")
+endforeach(var)
+
+#GSettings
+include(GSettings)
+add_schema("gconnect.gschema.xml")
+
 # Compile the library.
 #
 # By default, we create and install a shared library.  If you don't
@@ -58,6 +72,7 @@ vala_precompile_target(
 # to "STATIC".
 add_library(${GCONNECT_LIBRARY_NAME}
     SHARED
+    #STATIC
     ${GCONNECT_C_SOURCES})
 
 # Make sure the Vala sources are compiled to C before attempting to

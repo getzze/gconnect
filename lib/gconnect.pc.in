@@ -5,8 +5,8 @@ includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
 datarootdir=@CMAKE_INSTALL_FULL_DATAROOTDIR@
 datadir=@CMAKE_INSTALL_FULL_DATADIR@
 
-Name: @PACKAGE_NAME@
-Description: KDEConnect protocol implementation in Vala
-Version: @PACKAGE_VERSION@
+Name: @PROJECT_NAME@
+Description: @GCONNECT_SHORT_DESCRIPTION@
+Version: @GCONNECT_VERSION_MAJOR@.@GCONNECT_VERSION_MINOR@.@GCONNECT_VERSION_REVISION@
 Libs: -L${libdir} -lgconnect-@GCONNECT_VERSION_API@
 Cflags: -I${includedir}/gconnect-@GCONNECT_VERSION_API@

@@ -18,6 +18,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+using Notify;
+
 namespace Gconnect {
     public class Application {
         private static bool version;
@@ -61,7 +63,7 @@ namespace Gconnect {
 //            Gdk.init(ref args);
             Notify.init("gconnect");
 
-            var core = new Core.Core.instance();
+            var core = Core.Core.instance();
             if (core == null) {
                 error("Cannot initialize core");
             }

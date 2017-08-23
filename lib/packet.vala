@@ -37,7 +37,7 @@ namespace Gconnect.NetworkProtocol {
         
         public int64 id { get; private set; }
         public string packet_type { get; private set; }
-        public Json.Object body { get; private set; }
+        private Json.Object body { get; private set; }
         public uint64 payload_size { get; private set; }
         private Json.Object payload_transfer_info { get; set; }
 
@@ -54,7 +54,7 @@ namespace Gconnect.NetworkProtocol {
 //             this.payload = {};
         }
 
-        public Packet.withbody (string type, owned Json.Object body, int64 id = 0) {
+        internal Packet.with_body (string type, owned Json.Object body, int64 id = 0) {
             this(type, id);
             this.body = (owned)body;
         }
@@ -62,9 +62,9 @@ namespace Gconnect.NetworkProtocol {
         public Packet.identity() {
             var config = Config.Config.instance();
             this(PACKET_TYPE_IDENTITY);
-            this.set_string("deviceId",   config.device_id());
-            this.set_string("deviceName", config.get_name());
-            this.set_string("deviceType", config.device_type());
+            this.set_string("deviceId",   config.device_id);
+            this.set_string("deviceName", config.device_name);
+            this.set_string("deviceType", config.device_category);
             this.set_int("protocolVersion",  PROTOCOL_VERSION);
             var pm = Plugin.PluginManager.instance();
             this.set_strv("incomingCapabilities", pm.incoming_capabilities);
@@ -102,7 +102,7 @@ namespace Gconnect.NetworkProtocol {
 
                 debug("Packet type: %s", type);
 
-                return new Packet.withbody(type, body, id);
+                return new Packet.with_body(type, body, id);
             } catch (Error e) {
                 message("Failed to parse message: \'%s\', error: %s",
                         data, e.message);
@@ -166,11 +166,11 @@ namespace Gconnect.NetworkProtocol {
             return ret;
         }
 
-        public unowned Json.Object? get_object(string field) {
+        private unowned Json.Object? get_object(string field) {
             return this.body.get_object_member(field);
         }
 
-        public unowned Json.Array? get_array(string field) {
+        private unowned Json.Array? get_array(string field) {
             return this.body.get_array_member(field);
         }
 
@@ -198,11 +198,11 @@ namespace Gconnect.NetworkProtocol {
             this.body.set_array_member(field, (owned)arr);
         }
 
-        public void set_object(string field, owned Json.Object @value) {
+        private void set_object(string field, owned Json.Object @value) {
             this.body.set_object_member(field, @value);
         }
 
-        public void set_array(string field, owned Json.Array @value) {
+        private void set_array(string field, owned Json.Array @value) {
             this.body.set_array_member(field, @value);
         }
     }

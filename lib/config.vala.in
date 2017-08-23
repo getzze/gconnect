@@ -3,12 +3,33 @@ namespace Gconnect.Config {
     public const string PACKAGE_SUFFIX = "@GCONNECT_VERSION_API@";
     public const string APP_NAME = "@PROJECT_NAME@";
 
+    public string parse_dbus_path (string path) {
+        // TODO: replace characters that are not allowed as a dbus or GSettings path
+        return path;
+    }
+
     public class Config : Object {
         private GLib.Settings settings;
-        private GLib.Settings device_settings;
+        private GLib.Settings root_devices_settings;
+        private Gee.HashMap<string,GLib.Settings> devices_settings;
+        private string _device_id;
+        private string _device_category = "desktop";
         
 //         public Crypt crypt { get; private set; default = null; }
+        public string device_name {get; set;}
 
+        public string device_id {
+            get {
+                string host_name = Environment.get_host_name();
+                string user = Environment.get_user_name();
+                _device_id = @"gconnect:$user@$host_name";
+                return _device_id;
+            }
+        }       
+        
+        public string device_category {
+            get { return _device_category;}
+        }
 
         private Config() {
             init_user_dirs();
@@ -16,21 +37,14 @@ namespace Gconnect.Config {
 // 			this.crypt = init_crypto();
 
             this.settings = new Settings("org.gconnect");
-            this.device_settings = new Settings("org.gconnect.paired-devices");
+            this.settings.bind("name", this, "device_name", SettingsBindFlags.DEFAULT);
+            this.root_devices_settings = new Settings("org.gconnect.paired-devices");
             
         }
 
         public static Config instance() {
             var c = new Config();
             return c;
-        }
-
-        public string get_name () {
-            return this.settings.get_string("name");
-        }
-
-        public void set_name(string @value) {
-            this.settings.set_string("name", @value);
         }
 
         public string[] get_paired_devices() {
@@ -41,25 +55,27 @@ namespace Gconnect.Config {
             return this.settings.get_strv("auto-pair-devices");
         }       
 
-        public string device_id() {
-            string host_name = Environment.get_host_name();
-            string user = Environment.get_user_name();
-            return @"gconnect:$user@$host_name";
-        }       
-        
-        public string device_type() {
-            return "desktop";
-        }
+        public void add_paired_device (string raw_id, DeviceManager.DeviceInfo dev_info) {
+            // Use a gsettings-compatible id.
+            string id = parse_dbus_path(raw_id);
 
-        public void add_paired_device (string id, DeviceManager.DeviceInfo info) {
             var paired = new Gee.ArrayList<string>.wrap(this.get_auto_pair_devices());
             
             bool res = false;
             if (!paired.contains(id)) {
                 res = paired.add(id);
-                // TODO : add info
             }
+
             if (res) {
+                var dev = new Settings.with_path("org.gconnect.device", "/apps/gconnect/devices/" + id);
+                dev.set_string("id", raw_id);
+                dev.set_string("name", dev_info.name);
+                dev.set_string("type", dev_info.category);
+                dev.set_int("protocol-version", dev_info.protocol_version);
+                dev.set_strv("incoming-capabilities", dev_info.incoming);
+                dev.set_strv("outgoing-capabilities", dev_info.outgoing);
+                devices_settings[id] = dev;
+
                 this.settings.set_strv("paired-devices", paired.to_array());
             } else {
                 message("Could not add id %s to the paired devices list: %s", 
@@ -67,22 +83,50 @@ namespace Gconnect.Config {
             }
         }
         
-        public void remove_paired_device (string id) {
+        public void remove_paired_device (string raw_id) {
+            // Use a gsettings-compatible id.
+            string id = parse_dbus_path(raw_id);
+
             var paired = new Gee.ArrayList<string>.wrap(this.get_auto_pair_devices());
             bool res = paired.remove(id);
             if (res) {
+                var dev = devices_settings[id];
+                dev.reset("id");
+                dev.reset("name");
+                dev.reset("type");
+                dev.reset("protocol-version");
+                dev.reset("incoming-capabilities");
+                dev.reset("outgoing-capabilities");
+                devices_settings.unset(id);
+                
                 this.settings.set_strv("paired-devices", paired.to_array());
             } else {
-                info("Could not remove id %s from the paired devices list: %s",
+                message("Could not remove id %s from the paired devices list: %s",
                         id, string.joinv(";", paired.to_array()));
             }
         }
         
-        public DeviceManager.DeviceInfo get_paired_device(string id) {
-            DeviceManager.DeviceInfo info = {};
+        public DeviceManager.DeviceInfo get_paired_device(string raw_id) {
+            // Use a gsettings-compatible id.
+            string id = parse_dbus_path(raw_id);
+
+            DeviceManager.DeviceInfo dev_info = {};
             // TODO: add cache
+            var paired = new Gee.ArrayList<string>.wrap(this.get_auto_pair_devices());
+            bool res = paired.contains(id);
+            if (res) {
+                var dev = devices_settings[id];
+                dev_info.name = dev.get_string("name");
+                dev_info.category = dev.get_string("type");
+                dev_info.protocol_version = dev.get_int("protocol-version");
+                dev_info.incoming = dev.get_strv("incoming-capabilities");
+                dev_info.outgoing = dev.get_strv("outgoing-capabilities");
+            } else {
+                message("Could not retrieve device id %s from the paired devices list: %s",
+                        id, string.joinv(";", paired.to_array()));
+            }
             
-            return info;
+            return dev_info;
         }
         
         public static string get_storage_dir() {
