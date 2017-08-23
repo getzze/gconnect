@@ -30,7 +30,7 @@ namespace Gconnect.LoopbackConnection {
         private NetworkProtocol.Packet identity_packet;
 
         public LoopbackLinkProvider() {
-            identity_packet = new NetworkProtocol.Packet.identity();
+            this.identity_packet = new NetworkProtocol.Packet.identity();
         }
         
         public override string name { get; protected set; default="LoopbackLinkProvider"; }
@@ -48,7 +48,8 @@ namespace Gconnect.LoopbackConnection {
             LoopbackDeviceLink new_device_link = new LoopbackDeviceLink("loopback", this);
 
             // Send received connection for the local device
-            on_connection_received(identity_packet, new_device_link);
+            debug("Send self identity package: %s", this.identity_packet.to_string());
+            on_connection_received(this.identity_packet, new_device_link);
 
             if (_device_link!=null) {
                 _device_link = null;

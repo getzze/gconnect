@@ -40,6 +40,17 @@ namespace Gconnect.Config {
             this.settings.bind("name", this, "device_name", SettingsBindFlags.DEFAULT);
             this.root_devices_settings = new Settings("org.gconnect.paired-devices");
             
+//            bool dbg = true;
+//            if (dbg) {
+//                var dev_info = DeviceManager.DeviceInfo();
+//                dev_info.name = this.device_name;
+//                dev_info.category = this.device_category;
+//                dev_info.protocol_version = NetworkProtocol.PROTOCOL_VERSION;
+//                dev_info.incoming = {};
+//                dev_info.outgoing = {};
+                
+//                this.add_paired_device(this.device_id, dev_info);
+//            }
         }
 
         public static Config instance() {
@@ -59,7 +70,7 @@ namespace Gconnect.Config {
             // Use a gsettings-compatible id.
             string id = parse_dbus_path(raw_id);
 
-            var paired = new Gee.ArrayList<string>.wrap(this.get_auto_pair_devices());
+            var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
             
             bool res = false;
             if (!paired.contains(id)) {
@@ -67,7 +78,7 @@ namespace Gconnect.Config {
             }
 
             if (res) {
-                var dev = new Settings.with_path("org.gconnect.device", "/apps/gconnect/devices/" + id);
+                var dev = new Settings.with_path("org.gconnect.device", "/apps/gconnect/devices/" + id + "/");
                 dev.set_string("id", raw_id);
                 dev.set_string("name", dev_info.name);
                 dev.set_string("type", dev_info.category);
@@ -77,6 +88,14 @@ namespace Gconnect.Config {
                 devices_settings[id] = dev;
 
                 this.settings.set_strv("paired-devices", paired.to_array());
+                message("New trusted device added %s: %s (%s=%d), %s, %s",
+                        dev.get_string("id"),
+                        dev.get_string("name"),
+                        dev.get_string("type"),
+                        dev.get_int("protocol-version"),
+                        string.join(",", dev.get_strv("incoming-capabilities")),
+                        string.join(",", dev.get_strv("outgoing-capabilities"))
+                );
             } else {
                 message("Could not add id %s to the paired devices list: %s", 
                         id, string.joinv(";", paired.to_array()));
@@ -87,7 +106,7 @@ namespace Gconnect.Config {
             // Use a gsettings-compatible id.
             string id = parse_dbus_path(raw_id);
 
-            var paired = new Gee.ArrayList<string>.wrap(this.get_auto_pair_devices());
+            var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
             bool res = paired.remove(id);
             if (res) {
                 var dev = devices_settings[id];
@@ -112,7 +131,7 @@ namespace Gconnect.Config {
 
             DeviceManager.DeviceInfo dev_info = {};
             // TODO: add cache
-            var paired = new Gee.ArrayList<string>.wrap(this.get_auto_pair_devices());
+            var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
             bool res = paired.contains(id);
             if (res) {
                 var dev = devices_settings[id];

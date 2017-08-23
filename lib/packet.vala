@@ -62,20 +62,23 @@ namespace Gconnect.NetworkProtocol {
         public Packet.identity() {
             var config = Config.Config.instance();
             this(PACKET_TYPE_IDENTITY);
-            this.set_string("deviceId",   config.device_id);
-            this.set_string("deviceName", config.device_name);
-            this.set_string("deviceType", config.device_category);
-            this.set_int("protocolVersion",  PROTOCOL_VERSION);
-            var pm = Plugin.PluginManager.instance();
-            this.set_strv("incomingCapabilities", pm.incoming_capabilities);
-            this.set_strv("outgoingCapabilities", pm.outgoing_capabilities);
-
-//             this.set_string("deviceId", "testId");
-//             this.set_string("deviceName", "testName");
-//             this.set_string("deviceType", "testType");
-//             this.set_int("protocolVersion",  PROTOCOL_VERSION);
-//             this.set_string("incomingCapabilities", "incoming");
-//             this.set_string("outgoingCapabilities", "outgoing");
+            bool dbg = true;
+            if (!dbg) {
+                this.set_string("deviceId",   config.device_id);
+                this.set_string("deviceName", config.device_name);
+                this.set_string("deviceType", config.device_category);
+                this.set_int("protocolVersion",  PROTOCOL_VERSION);
+                var pm = Plugin.PluginManager.instance();
+                this.set_strv("incomingCapabilities", pm.incoming_capabilities);
+                this.set_strv("outgoingCapabilities", pm.outgoing_capabilities);
+            } else {
+                this.set_string("deviceId", "testId");
+                this.set_string("deviceName", "testName");
+                this.set_string("deviceType", "testType");
+                this.set_int("protocolVersion",  PROTOCOL_VERSION);
+                this.set_strv("incomingCapabilities", {});
+                this.set_strv("outgoingCapabilities", {});
+            }
         }
 
         public static Packet? unserialize(string data) {
@@ -124,6 +127,8 @@ namespace Gconnect.NetworkProtocol {
             gen.set_pretty(false);
 
             string data = gen.to_data(null);
+            // Reown body Object
+            this.body = root_obj.get_object_member("body");
             return data;
         }
 
@@ -140,22 +145,37 @@ namespace Gconnect.NetworkProtocol {
         }
 
         public bool get_bool(string field) {
+            if (!this.has_field(field)) {
+                message("Member %s dos not exist", field);
+            }
             return this.body.get_boolean_member(field);
         }
 
         public int get_int(string field) {
+            if (!this.has_field(field)) {
+                message("Member %s dos not exist", field);
+            }
             return (int)this.body.get_int_member(field);
         }
 
         public double get_double(string field) {
+            if (!this.has_field(field)) {
+                message("Member %s dos not exist", field);
+            }
             return this.body.get_double_member(field);
         }
 
         public string get_string(string field) {
+            if (!this.has_field(field)) {
+                message("Member %s dos not exist", field);
+            }
             return this.body.get_string_member(field);
         }
 
         public string[] get_strv(string field) {
+            if (!this.has_field(field)) {
+                message("Member %s dos not exist", field);
+            }
             GLib.List<Json.Node> lst = this.body.get_array_member(field).get_elements();
             string[] ret = {};
             string s;

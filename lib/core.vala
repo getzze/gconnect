@@ -78,6 +78,10 @@ namespace Gconnect.Core {
 
         
         public Core (bool test = true) {
+            this._dict.link_providers = new HashSet<Connection.LinkProvider>();
+            this._dict.devices = new HashMap<string, DeviceManager.Device>();
+            this._dict.discovery_mode_acquisitions = new HashSet<string>();
+            
             // Load backends
             if (test) {
                 this._dict.link_providers.add(new LoopbackConnection.LoopbackLinkProvider());
@@ -190,8 +194,8 @@ namespace Gconnect.Core {
 
         [Callback]
         private void on_new_device_link(NetworkProtocol.Packet identity_packet, Connection.DeviceLink dl) {
-            string id = identity_packet.get_string("device_id");
-            string name = identity_packet.get_string("device_name");
+            string id = identity_packet.get_string("deviceId");
+            string name = identity_packet.get_string("deviceName");
             DeviceManager.Device device = null;
             debug("Device discovered %s via %s", id, dl.provider().name);
 

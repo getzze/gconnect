@@ -153,11 +153,11 @@ global_add_compiler_flags(-Wno-incompatible-pointer-types)
 # Uninstall target
 configure_file (
     "${CMAKE_SOURCE_DIR}/cmake/Uninstall.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/Uninstall.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
     IMMEDIATE @ONLY)
 
 add_custom_target (uninstall
-    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/Uninstall.cmake)
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 
 
 # The name of the shared library.  Note that a "lib" prefix will be
