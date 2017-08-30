@@ -45,7 +45,7 @@ namespace Gconnect.Connection {
     
 
     public abstract class DeviceLink : GLib.Object {
-        protected LinkProvider _link_provider;
+        protected weak LinkProvider _link_provider;
         protected PairStatus _pair_status;
 
 //         protected Crypt.PrivateKey private_key;
@@ -88,7 +88,7 @@ namespace Gconnect.Connection {
         
         public LinkProvider provider() { return _link_provider; }
 
-        public abstract bool send_packet(NetworkProtocol.Packet np);
+        public abstract bool send_packet(NetworkProtocol.Packet pkt);
 
         //user actions
         public abstract void user_requests_pair();
@@ -99,11 +99,13 @@ namespace Gconnect.Connection {
     }
     
     public abstract class PairingHandler : GLib.Object {
-        protected DeviceLink _device_link;
+        protected weak DeviceLink device_link;
 
         public signal void pairing_error(string message);
         
-        public PairingHandler(DeviceLink parent) {}
+        public PairingHandler(DeviceLink parent) {
+            device_link = parent;
+        }
 
         public DeviceLink link { get; set; }
 

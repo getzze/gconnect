@@ -1,0 +1,6 @@
+[Plugin]
+Module=ExampleVala.so
+Name=Example vala plugin
+Description=Show debug packets
+X-Outgoing-Capabilities=,
+X-Incoming-Capabilities=debug,

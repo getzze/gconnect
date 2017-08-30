@@ -21,6 +21,53 @@
 using Notify;
 
 namespace Gconnect {
+
+    CoreDaemon __instance = null;
+    
+    public class CoreDaemon: Core.Core {
+        public static new CoreDaemon instance() {
+            if (__instance == null) {
+                var core = new CoreDaemon();
+                __instance = core;
+            }
+            return __instance;
+        }
+        
+        public new void close () {
+           base.close();
+           __instance = null; 
+        }
+
+        public override void ask_pairing_confirmation(string device_id) {
+            // Accept/reject pairing
+            DeviceManager.Device device = get_device(device_id);
+
+            try {
+                Notify.Notification notification = new Notify.Notification ("Pairing request", "Pairing request from " + device.name, "dialog-information");
+                notification.add_action ("accept-pairing", "Accept", (notification, action) => {
+                    device.accept_pairing();
+                    notification.close ();
+                });
+                notification.add_action ("reject-pairing", "Reject", (notification, action) => {
+                    device.reject_pairing();
+                    notification.close ();
+                });
+                notification.show ();
+            } catch (Error e) {
+                error("Error: %s", e.message);
+            }
+        }
+
+        public override void report_error(string title, string description) {
+            try {
+                Notify.Notification notification = new Notify.Notification ("A core error was reported: " + title, description, "");
+                notification.show ();
+            } catch (Error e) {
+                error("Error: %s", e.message);
+            }
+        }
+    }
+
     public class Application {
         private static bool version;
         private static bool api_version;
@@ -33,7 +80,7 @@ namespace Gconnect {
         };
 
         static int main (string[] args) {
-            GLib.Intl.setlocale ();
+            GLib.Intl.setlocale();
 
             try {
                 var opt_context = new OptionContext ("- gconnect");
@@ -63,7 +110,7 @@ namespace Gconnect {
 //            Gdk.init(ref args);
             Notify.init("gconnect");
 
-            var core = Core.Core.instance();
+            var core = CoreDaemon.instance();
             if (core == null) {
                 error("Cannot initialize core");
             }
@@ -72,6 +119,10 @@ namespace Gconnect {
             var loop = new MainLoop();
 
             loop.run();
+
+            // Unregister DBus
+            core.close();
+            
             return 0;
         }
     }

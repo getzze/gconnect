@@ -26,11 +26,15 @@
     </key>
 
     <child name="devices" schema="org.gconnect.paired-devices"/>
+    <child name="plugins" schema="org.gconnect.plugins"/>
 
   </schema>
   
   <schema id="org.gconnect.paired-devices" path="/apps/gconnect/devices/">
     <child name="self" schema="org.gconnect.device"/>
+  </schema>
+
+  <schema id="org.gconnect.plugins" path="/apps/gconnect/plugins/">
   </schema>
 
   <schema id="org.gconnect.device">

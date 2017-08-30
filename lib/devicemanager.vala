@@ -26,10 +26,6 @@ using Peas;
 
 namespace Gconnect.DeviceManager {
     
-    void warn(string info) {
-        warning("Device pairing error: %s", info);
-    }
-
     /* Return a negative number if p1 has higher priority than p2
      * Sort by returning a negative integer if the first value comes before the second, 
      * 0 if they are equal, or a positive integer if the first value comes after the second.
@@ -44,6 +40,14 @@ namespace Gconnect.DeviceManager {
         return set_array.to_array();
     }
     
+    string info_to_string(Peas.PluginInfo info) {
+        string ret = "plugin %s: outgoing=[%s], incoming=[%s]".printf(
+                        info.get_name(),
+                        string.joinv(",", unique_array(info.get_external_data("X-Outgoing-Capabilities"))),
+                        string.joinv(",", unique_array(info.get_external_data("X-Incoming-Capabilities"))));
+        return ret;
+    }
+    
     public struct DeviceInfo {
         public string name;
         public string category;
@@ -52,7 +56,7 @@ namespace Gconnect.DeviceManager {
         public string[] outgoing;
     }
     
-    [DBus(name = "gconnect.device")]
+    [DBus(name = "org.gconnect.device")]
     public class Device: GLib.Object {
         /* Private fields */
         private Gee.ArrayList<Connection.DeviceLink> _device_links;
@@ -62,6 +66,7 @@ namespace Gconnect.DeviceManager {
         private Gee.HashSet<Connection.PairingHandler> _pair_requests;
         private DeviceInfo info;
         private Peas.ExtensionSet _extension_set;
+        private uint bus_id = 0;
         
         /* Signals */
         public signal void reachable_changed(bool reachable);
@@ -78,12 +83,9 @@ namespace Gconnect.DeviceManager {
         *
         * We already know it but we need to wait for an incoming DeviceLink to communicate
         */
-        public Device.from_id(GLib.Object parent, string device_id) {
+        public Device.from_id(string device_id) {
             this.id = device_id;
             this.info = Config.Config.instance().get_paired_device(this.id);
-            
-            this.name = info.name;
-            this.category = info.category;
 
             //Assume every plugin is supported until addLink is called and we can get the actual list
             this._supported_plugins = new Gee.HashSet<string>();
@@ -97,11 +99,13 @@ namespace Gconnect.DeviceManager {
         *
         * We know everything but we don't trust it yet
         */
-        public Device.from_link(GLib.Object parent, NetworkProtocol.Packet identity, Connection.DeviceLink dl) {
-            this.id = identity.get_string("deviceId");
-            this.name = identity.get_string("deviceName");
+        public Device.from_link(NetworkProtocol.Packet identity, Connection.DeviceLink dl) {
+            debug("New device object");
 
-            add_link(identity, dl);
+            this.info = DeviceInfo();
+            this.id = identity.parse_device_info(ref this.info);
+
+            add_link(dl);
 
             this.pairing_error.connect((c, m)=> {warning("Device pairing error: %s", m);});
         }
@@ -110,41 +114,73 @@ namespace Gconnect.DeviceManager {
         public string id { get; private set; }
         public string name { 
             get {
-                return name;
+                return this.info.name;
             }
             set{ 
-                if (this.name != value) {
-                    name = value;
-                    name_changed(name);
+                if (this.info.name != value) {
+                    this.info.name = value;
+                    name_changed(this.info.name);
                 }
             }
         }
-        public string category { get; private set; }
-        public int protocol_version { get; private set; default=NetworkProtocol.PROTOCOL_VERSION;}
+        public string category { 
+            get {
+                return this.info.category;
+            }
+            set { 
+                this.info.category = value;
+            }
+        }
+        public int protocol_version { 
+            get {
+                return this.info.protocol_version;
+            }
+            set { 
+                this.info.protocol_version = value;
+            }
+        }
+        public string[] incoming_capabilities { 
+            get {
+                return this.info.incoming;
+            }
+            set { 
+                this.info.incoming = value;
+            }
+        }
+        public string[] outgoing_capabilities { 
+            get {
+                return this.info.outgoing;
+            }
+            set { 
+                this.info.outgoing = value;
+            }
+        }
+
         public string encryption_info { get; set; }
 
         /* Public Methods */
-        public string dbus_path() { return "/modules/gconnect/devices/"+id; }
+        public string dbus_path() { return "/modules/gconnect/devices/"+this.id; }
         
+        //Update device information
+        [DBus (visible = false)]
+        public void update_info(NetworkProtocol.Packet identity) {
+            var old_name = this.name;
+            var dump = identity.parse_device_info(ref this.info);
+            if (old_name != this.name) {
+                name_changed(this.name);
+            }
+        }
+
         //Add and remove links
         [DBus (visible = false)]
-        public void add_link(NetworkProtocol.Packet identity, Connection.DeviceLink dl)
+        public void add_link(Connection.DeviceLink dl)
                 requires (!_device_links.contains(dl))
         {
             debug("Adding link to %s via %s.", this.id, dl.provider().name);
 
-            this.protocol_version = identity.get_int("protocolVersion");
-            if (this.protocol_version != NetworkProtocol.PROTOCOL_VERSION) {
-                warning("%s - warning, device uses a different protocol version %d, expected %d.", this.name, this.protocol_version, NetworkProtocol.PROTOCOL_VERSION);
-            }
-
             dl.destroyed.connect(link_destroyed);
 
             _device_links.add(dl);
-
-            //re-read the device name from the identity Packet because it could have changed
-            this.name = identity.get_string("deviceName");
-            this.category = identity.get_string("deviceType");
 
             //Theoretically we will never add two links from the same provider (the provider should destroy
             //the old one before this is called), so we do not have to worry about destroying old links.
@@ -155,15 +191,12 @@ namespace Gconnect.DeviceManager {
             // Sort by priority (higher first)
             _device_links.sort(higher_than);
 
-            bool capabilities_supported = identity.has_field("incomingCapabilities") || identity.has_field("outgoingCapabilities");
-            if (capabilities_supported) {
-                info.outgoing = identity.get_strv("outgoingCapabilities");
-                info.incoming = identity.get_strv("incomingCapabilities");
-
-//                 _supported_plugins = Plugin.PluginManager.instance().pluginsForCapabilities(info.incoming, info.outgoing);
-            } else {
-//                 _supported_plugins = Plugin.PluginManager.instance().getPluginList().toSet();
-            }
+//            bool capabilities_supported = this.info.outgoing.length>0 || this.info.incoming.length>0;
+//            if (capabilities_supported) {
+//                _supported_plugins = Plugin.PluginManager.instance().pluginsForCapabilities(info.incoming, info.outgoing);
+//            } else {
+//                _supported_plugins = Plugin.PluginManager.instance().getPluginList().toSet();
+//            }
 
             reload_plugins();
 
@@ -273,25 +306,26 @@ namespace Gconnect.DeviceManager {
         
         [Callback]
         public void reload_plugins() {
+            debug("Preload plugin engine");
             var engine = Plugin.PluginManager.instance().engine;
-            Type tt = typeof(Plugin.Plugin);
-            message("Extension set for interface: %s (%s)", tt.name(), tt.is_interface().to_string());
+            debug("Activate all available plugins for device %s.", this.id);
             _extension_set = new Peas.ExtensionSet(engine, typeof(Plugin.Plugin), "device", this);
-            _extension_set.@foreach((ext_set, info, extension) => {
-                (extension as Plugin.Plugin).name = info.get_name();
-                (extension as Plugin.Plugin).outgoing_capabilities = unique_array(
-                    info.get_external_data("X-Outgoing-Capabilities"));
-                (extension as Plugin.Plugin).incoming_capabilities = unique_array(
-                    info.get_external_data("X-Incoming-Capabilities"));
-            });
 
             _extension_set.extension_added.connect((info, extension) => {
-                debug("Extension added for interface %s from plugin: %s", typeof(Plugin.Plugin).name(), info.get_name() );
+                debug("Activate " + info_to_string(info));
                 (extension as Plugin.Plugin).activate();
             });
             _extension_set.extension_removed.connect((info, extension) => {
                 (extension as Plugin.Plugin).deactivate();
             });
+            
+            _extension_set.@foreach((ext_set, info, extension) => {
+                if (info.is_loaded()) {
+                    debug("Activate " + info_to_string(info));
+                    (extension as Plugin.Plugin).activate();
+                }
+            });
+
         }
 
         [Callback]
@@ -332,6 +366,33 @@ namespace Gconnect.DeviceManager {
         public string status_icon_name() {
             return icon_for_status(is_reachable(), is_paired());
         }
+        
+        [DBus (visible = false)]
+        public void publish (DBusConnection conn, ref Gee.ArrayList<uint> registered) {
+            try	{
+                string path = this.dbus_path();
+                this.bus_id = conn.register_object(path, this);
+                registered.add(this.bus_id);
+                debug("Register device %s to dbus: %s(%u)", this.id, path, this.bus_id);
+			} catch (IOError e) {
+				warning ("Could not register objects: %s", e.message);
+			}
+        }
+
+        [DBus (visible = false)]
+        public void unpublish (DBusConnection conn, ref Gee.ArrayList<uint> registered) {
+            try	{
+                if (!conn.unregister_object(this.bus_id)) {
+					warning("Failed to unregister object id %u", this.bus_id);
+                } else {
+                    debug("Unregister device %s from dbus.", this.id);
+                    registered.remove(this.bus_id);
+                    this.bus_id = 0;
+                }
+			} catch (IOError e) {
+				warning ("Could not register objects: %s", e.message);
+			}
+        }
 
         /* Private methods */
         [Callback]
@@ -342,7 +403,8 @@ namespace Gconnect.DeviceManager {
                 int treated = 0;
                 // TODO: use a dictionary with incoming-capabilities instead
                 _extension_set.@foreach((ext_set, info, extension) => {
-                    if (pkt.packet_type in (extension as Plugin.Plugin).incoming_capabilities) {
+                    if (pkt.packet_type in unique_array(
+                        info.get_external_data("X-Incoming-Capabilities"))) {
                         (extension as Plugin.Plugin).receive(pkt);
                         treated += 1;
                     }
@@ -351,7 +413,7 @@ namespace Gconnect.DeviceManager {
                     warning("Discarding unsupported packet %s for device %s.", pkt.packet_type, this.name);
                 }
             } else {
-                debug("Device %s not paired, ignoring packet %s", info.name, pkt.packet_type);
+                debug("Device %s not paired, ignoring packet %s", this.name, pkt.packet_type);
                 unpair();
             }
 

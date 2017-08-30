@@ -142,6 +142,8 @@ endif(CMAKE_BUILD_TYPE STREQUAL "")
 
 list(APPEND VALA_COMPILER_FLAGS "--target-glib=2.38")
 list(APPEND VALA_COMPILER_FLAGS_DEBUG "--debug")
+#list(APPEND VALA_COMPILER_FLAGS_DEBUG "--enable-mem-profiler")
+list(APPEND VALA_COMPILER_FLAGS_DEBUG "--enable-checking")
 
 # Lots of perfectly valid Vala code will trigger warnings from the C
 # compiler, almost always false-positives.  This often drowns out
@@ -149,6 +151,9 @@ list(APPEND VALA_COMPILER_FLAGS_DEBUG "--debug")
 include(AddCompilerFlags)
 global_add_compiler_flags(-Wno-incompatible-pointer-types)
 
+## Add code covergae with gcovr
+#include(CodeCoverage)
+#APPEND_COVERAGE_COMPILER_FLAGS("-O0 -fprofile-arcs -ftest-coverage")
 
 # Uninstall target
 configure_file (
@@ -182,7 +187,7 @@ set (LIBRARY_PATH "lib")
 
 add_subdirectory(lib)
 add_subdirectory(daemon)
-# add_subdirectory(cli)
-# add_subdirectory(gui)
-# add_subdirectory(tests)
-# add_subdirectory(po)
+#add_subdirectory(cli)
+#add_subdirectory(gui)
+#add_subdirectory(tests)
+add_subdirectory(po)

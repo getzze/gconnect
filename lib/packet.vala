@@ -19,9 +19,8 @@
  */
 
 using Json;
-// using Connection;
-// using DeviceManager;
-// using Config;
+//using DeviceManager;
+//using Config;
 
 namespace Gconnect.NetworkProtocol {
     const string PACKET_TYPE_IDENTITY = "kdeconnect.identity";
@@ -134,6 +133,36 @@ namespace Gconnect.NetworkProtocol {
 
         public string to_string() {
             return this.serialize();
+        }
+
+        public string? get_device_id() {
+            if (this.packet_type != PACKET_TYPE_IDENTITY) {
+                warning("The received packet is not an identity packet but a %s", this.packet_type);
+                return null;
+            }
+            string id = this.get_string("deviceId");
+            return id;
+        }
+
+        public string? parse_device_info(ref DeviceManager.DeviceInfo dev_info) {
+            string? id = this.get_device_id();
+            if (id==null) {
+                return null;
+            }
+
+            dev_info.name = this.get_string("deviceName");
+            dev_info.category = this.get_string("deviceType");
+            dev_info.protocol_version = this.get_int("protocolVersion");
+            if (dev_info.protocol_version != PROTOCOL_VERSION) {
+                warning("%s - warning, device uses a different protocol version %d, expected %d.",
+                        dev_info.name, dev_info.protocol_version, PROTOCOL_VERSION);
+            }
+            bool capabilities_supported = this.has_field("incomingCapabilities") || this.has_field("outgoingCapabilities");
+            if (capabilities_supported) {
+                dev_info.outgoing = this.get_strv("outgoingCapabilities");
+                dev_info.incoming = this.get_strv("incomingCapabilities");
+            }
+            return id;
         }
 
         public bool has_field(string field) {

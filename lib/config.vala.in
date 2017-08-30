@@ -163,8 +163,12 @@ namespace Gconnect.Config {
                                     APP_NAME);
         }
 
-        public static string get_plugins_dir() {
+        public static string get_plugins_local_dir() {
             return Path.build_filename(get_storage_dir(), "/plugins");
+        }
+
+        public static string get_plugins_global_dir() {
+            return Path.build_filename("@CMAKE_INSTALL_FULL_DATADIR@", "@PROJECT_NAME@/plugins");
         }
 
         private static void init_user_dirs() {

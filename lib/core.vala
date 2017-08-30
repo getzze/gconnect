@@ -38,11 +38,14 @@ namespace Gconnect.Core {
         public HashSet<string> discovery_mode_acquisitions;
     }
 
-    [DBus(name = "gconnect.core")]
+    [DBus(name = "org.gconnect.core")]
     public class Core: GLib.Object {
-        private static Core? _instance = null;
-        
+        protected static Core? _instance = null;
         private CorePrivateDict _dict;
+
+        private unowned DBusConnection conn;
+        private Gee.ArrayList<uint> registered_objects;
+        private uint bus_id = 0;
         
         public signal void device_visibility_changed(string id, bool visible);
         public signal void announced_name_changed(string name);
@@ -82,6 +85,15 @@ namespace Gconnect.Core {
             this._dict.devices = new HashMap<string, DeviceManager.Device>();
             this._dict.discovery_mode_acquisitions = new HashSet<string>();
             
+            // Register on DBus
+            this.bus_id = Bus.own_name (BusType.SESSION, "org.gconnect.core",
+								   BusNameOwnerFlags.NONE, 
+//								   BusNameOwnerFlags.ALLOW_REPLACEMENT
+//                                   | BusNameOwnerFlags.REPLACE,
+                                   on_bus_acquired, 
+								   on_bus_name_acquired, 
+                                   on_bus_name_lost);
+
             // Load backends
             if (test) {
                 this._dict.link_providers.add(new LoopbackConnection.LoopbackLinkProvider());
@@ -97,7 +109,7 @@ namespace Gconnect.Core {
             // Get known paired devices
             var list = Config.Config.instance().get_paired_devices();
             foreach (string device_id in list) {
-                this.add_device(new DeviceManager.Device.from_id(this, device_id));
+                this.add_device(new DeviceManager.Device.from_id(device_id));
             }
 
             // Discover new devices
@@ -121,6 +133,9 @@ namespace Gconnect.Core {
 //             }
 //             return Core._instance;
         }
+
+        [DBus (visible = false)]
+        public string dbus_path() { return "/modules/gconnect";}
 
         [Callback]
         public void acquire_discovery_mode(string key) {
@@ -146,6 +161,7 @@ namespace Gconnect.Core {
         
         private void remove_device(DeviceManager.Device device) {
             string id = device.id;
+            device.unpublish(this.conn, ref registered_objects);
             this._dict.devices.unset(device.id);
             this.device_removed(id);
         }
@@ -193,27 +209,29 @@ namespace Gconnect.Core {
         }
 
         [Callback]
-        private void on_new_device_link(NetworkProtocol.Packet identity_packet, Connection.DeviceLink dl) {
-            string id = identity_packet.get_string("deviceId");
-            string name = identity_packet.get_string("deviceName");
+        private void on_new_device_link(NetworkProtocol.Packet identity, Connection.DeviceLink dl) {
+            string id = identity.get_device_id();
             DeviceManager.Device device = null;
             debug("Device discovered %s via %s", id, dl.provider().name);
 
             if (this._dict.devices.has_key(id)) {
-                debug("It is a known device: %s", name);
+                debug("It is a known device: %s", id);
                 device = this._dict.devices[id];
                 bool was_reachable = device.is_reachable();
-                device.add_link(identity_packet, dl);
+                device.update_info(identity);
+                device.add_link(dl);
                 if (!was_reachable) {
                     this.device_visibility_changed(id, true);
                 }
             } else {
-                debug("It is a new device: %s", name);
-                device = new DeviceManager.Device.from_link(this, identity_packet, dl);
+                debug("It is a new device: %s", id);
+                device = new DeviceManager.Device.from_link(identity, dl);
 
                 // we discard the connections that we created but it's not paired.
                 if (is_discovering_devices() || device.is_paired() || dl.link_should_be_kept_alive()) {
                     this.add_device(device);
+                } else {
+                    debug("Device %s discarded because not in discovery mode, device is not paired and the link should not be kept alive.", device.id);
                 }
             }
         }
@@ -259,6 +277,7 @@ namespace Gconnect.Core {
 
         private void add_device(DeviceManager.Device device) {
             string id = device.id;
+            debug("Add device %s to list", id);
             device.reachable_changed.connect((d, b) => this.on_device_status_changed(d));
             device.paired_changed.connect((d, b) => this.on_device_status_changed(d));
             device.has_pairing_requests_changed.connect((d, has_requests) => this.pairing_requests_changed(has_requests));
@@ -267,6 +286,9 @@ namespace Gconnect.Core {
                     this.ask_pairing_confirmation(d.id);
                 }
             });
+            // Publish on DBus
+            device.publish(this.conn, ref registered_objects);
+
             this._dict.devices[id] = device;
 
             this.device_added(id);
@@ -284,6 +306,47 @@ namespace Gconnect.Core {
 
         public string self_id() {
             return Config.Config.instance().device_id;
+        }
+        
+        /* DBus was acquired, register plugin objects */
+		private void on_bus_acquired (DBusConnection conn) {
+			this.conn = conn;
+			try	{
+                string path = this.dbus_path();
+                registered_objects.add(conn.register_object(path, this));
+			} catch (IOError e) {
+				warning ("Could not register objects: %s", e.message);
+			}
+		}
+		
+		private void on_bus_name_acquired (DBusConnection conn, string name) {
+			message("DBus server started with bus name '%s'.", name);
+		}
+		
+		private void on_bus_name_lost (DBusConnection conn, string name) {
+			error("Could not aquire name '%s'\n", name);
+        }
+        
+        /* should be a destructor, but '~Core()' never gets called? */
+		[DBus (visible = false)]
+        public void close () {
+			debug("Try to close DBus connection.");
+            foreach (uint reg_id in registered_objects) {
+				if (!this.conn.unregister_object(reg_id)) {
+					warning("Failed to unregister object id %u", reg_id);
+                }
+			}
+			registered_objects.clear();
+			Bus.unown_name(bus_id);
+			try {
+				this.conn.close_sync ();
+				message("DBus server stopped.");
+			}
+			catch (Error e) {
+				debug ("Error closing DBus connection: %s\n", e.message);
+			}
+            
+            __instance = null;
         }
     }
 }

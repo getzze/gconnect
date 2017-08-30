@@ -178,6 +178,9 @@ endmacro()
 #   GIR name-version.gir
 #     If you would like to have valac generate a GIR, pass the file
 #     name here.
+#   LIBRARY name-version
+#     The library name to link the gir file. Set to TARGET if not 
+#     specified.
 #   HEADER name.h
 #     If you would like to have valac generate a C header, pass the
 #     file name here.
@@ -192,7 +195,7 @@ endmacro()
 #     Any additional dependencies you would like.
 macro(vala_precompile_target TARGET GENERATED_SOURCES)
   set (options)
-  set (oneValueArgs VAPI GIR HEADER)
+  set (oneValueArgs VAPI GIR LIBRARY HEADER)
   set (multiValueArgs FLAGS PACKAGES DEPENDS)
   cmake_parse_arguments(VALAC "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   unset (options)
@@ -210,10 +213,15 @@ macro(vala_precompile_target TARGET GENERATED_SOURCES)
 
   if(VALAC_GIR)
     list(APPEND non_source_out_files "${VALAC_GIR}")
+    set (LIB_NAME ${TARGET})
+    if(VALAC_LIBRARY)
+        set (LIB_NAME ${VALAC_LIBRARY})
+    endif()    
     list(APPEND non_source_valac_args
       "--gir" "${VALAC_GIR}"
-      "--library" "${TARGET}"
-      "--shared-library" "${CMAKE_SHARED_LIBRARY_PREFIX}${TARGET}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+      "--library" "${LIB_NAME}"
+      "--shared-library" "${CMAKE_SHARED_LIBRARY_PREFIX}${LIB_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    unset(LIB_NAME) 
   endif()
 
   if(VALAC_HEADER)

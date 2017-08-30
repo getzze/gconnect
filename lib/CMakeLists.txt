@@ -5,6 +5,7 @@
 
 # The library short description
 set(GCONNECT_SHORT_DESCRIPTION "KDEConnect protocol implementation in Vala")
+set(GCONNECT_PLUGIN_SUBDIR "${PROJECT_NAME}/plugins/")
 
 # Generate a config.vala file, which can be used for version
 # information and feature detection.
@@ -51,6 +52,7 @@ vala_precompile_target(
     PACKAGES ${GCONNECT_VALA_PACKAGES}
     VAPI "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.vapi"
     GIR "${GCONNECT_GIR_NAME}.gir"
+    LIBRARY "${GCONNECT_LIBRARY_NAME}"
     HEADER "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.h"
     ${GCONNECT_VALA_SOURCES})
 

@@ -26,20 +26,11 @@ using Gee;
 
 namespace Gconnect.Plugin {
     public interface Plugin : GLib.Object {
-        public abstract string name { get; set; }
-        public abstract string[] outgoing_capabilities { get; set; }
-        public abstract string[] incoming_capabilities { get; set; }
         /* Unowned (weak) reference to the Device */
-//        public abstract unowned GLib.Object device { get; construct set; }
         public abstract unowned DeviceManager.Device device { get; construct set; }
 
         /* Send a request packet */
         public virtual bool request(NetworkProtocol.Packet pkt) {
-            if (!(pkt.packet_type in this.outgoing_capabilities)) {
-                debug("Plugin %s tried to send an unsupported package type %s. Supported: %s",
-                        this.name, pkt.packet_type, string.joinv(";", this.outgoing_capabilities));
-                return false;
-            }
             return this.device.send_packet(pkt);
         }
 
@@ -56,7 +47,7 @@ namespace Gconnect.Plugin {
         public abstract void deactivate();
     }
 
-    [DBus(name = "gconnect.pluginmanager")]
+    [DBus(name = "org.gconnect.pluginmanager")]
     public class PluginManager : GLib.Object { 
         private static PluginManager _instance = null;
         
@@ -88,6 +79,8 @@ namespace Gconnect.Plugin {
             private set {}
         }
 
+        public string dbus_path() { return "/modules/gconnect/plugins/"; }
+
         [DBus (visible = false)]
         public Peas.Engine engine { get; private set;}
 
@@ -98,10 +91,14 @@ namespace Gconnect.Plugin {
             /* Enable the python3 loader */
             this.engine.enable_loader("python3");
 
+            this.extra_paths = new Gee.ArrayList<string>();
+            
             /* Add path to look for plugins */
             foreach (var path in plugins_paths()) {
-                debug("Look for plugins in directory: %s", path);
-                this.engine.add_search_path(path, path);
+                if (path!=null) {
+                    debug("Look for plugins in directory: %s", path);
+                    this.engine.add_search_path(path, path);
+                }
             }
         
             bool ok;
@@ -127,8 +124,11 @@ namespace Gconnect.Plugin {
         
         private string[] plugins_paths() {
             string[] paths = extra_paths.to_array();
+
             /* Add generic plugin path */
-            paths += Config.Config.get_plugins_dir();
+            paths += Config.Config.get_plugins_local_dir();
+            paths += Config.Config.get_plugins_global_dir();
+
             /* Add current dir (comment if not debug) */
             if (true) {
                 string current_path = Path.build_filename(Environment.get_current_dir(), "/plugins");
