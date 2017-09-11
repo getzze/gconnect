@@ -30,11 +30,11 @@ namespace Gconnect.Connection {
         public const int PRIORITY_MEDIUM = 50;  //eg: internet
         public const int PRIORITY_HIGH = 100;   //eg: lan
 
-        public signal void on_connection_received(NetworkProtocol.Packet ip, DeviceLink dl);
-
         public abstract string name {get; protected set; }
         public abstract int priority {get; protected set; }
         
+        public signal void on_connection_received(NetworkProtocol.Packet ip, DeviceLink dl);
+
         [Callback]
         public abstract void on_start();
         [Callback]
@@ -52,12 +52,19 @@ namespace Gconnect.Connection {
         
         public enum PairStatus { NOT_PAIRED, PAIRED }
 
+        public weak LinkProvider provider {
+            get {return this._link_provider;}
+            private set {this._link_provider = value;}
+        }
+        public abstract string name { get; protected set;}
+        public string device_id { get; protected set;}
+
         public signal void pairing_request(PairingHandler handler);
         public signal void pairing_request_expired(PairingHandler handler);
         public signal void pair_status_changed(DeviceLink dl, PairStatus status);
-        public signal void pairing_error(string error);
+        public signal void pairing_error(string mess);
         public signal void received_packet(NetworkProtocol.Packet np);
-        public signal void destroyed();
+        public signal void destroyed(string device_id);
         
         public DeviceLink(string id, LinkProvider parent)
                 requires (id != "")
@@ -69,25 +76,28 @@ namespace Gconnect.Connection {
         }
         
         ~DeviceLink() {
-            destroyed();
+            destroyed(this.device_id);
         }
 
-        public abstract string name { get; protected set;}
+        protected virtual void hidden_pair_status_setter(PairStatus st) {
+            set_and_announce_pair_status(st);
+        }
 
-        public string device_id { get; protected set;}
+        public PairStatus get_pair_status() {
+            return _pair_status;
+        }
 
-        public PairStatus pair_status {
-            get { return _pair_status; } 
-            set {
-                if (_pair_status != value) {
-                    _pair_status = value;
-                    pair_status_changed(this, _pair_status);
-                }
+        public virtual void set_pair_status(PairStatus status) {
+            set_and_announce_pair_status(status);
+        }
+        
+        protected void set_and_announce_pair_status(PairStatus st) {
+            if (_pair_status != st) {
+                _pair_status = st;
+                pair_status_changed(this, _pair_status);
             }
         }
         
-        public LinkProvider provider() { return _link_provider; }
-
         public abstract bool send_packet(NetworkProtocol.Packet pkt);
 
         //user actions
@@ -99,17 +109,20 @@ namespace Gconnect.Connection {
     }
     
     public abstract class PairingHandler : GLib.Object {
-        protected weak DeviceLink device_link;
+        protected weak DeviceLink _device_link;
 
-        public signal void pairing_error(string message);
-        
-        public PairingHandler(DeviceLink parent) {
-            device_link = parent;
+        public weak DeviceLink device_link {
+            get { return _device_link;}
+            set { _device_link = value;}
         }
 
-        public DeviceLink link { get; set; }
+        public signal void pairing_error(string mess);
+        
+        public PairingHandler(DeviceLink parent) {
+            this._device_link = parent;
+        }
 
-        public abstract void package_received(NetworkProtocol.Packet np);
+        public abstract void packet_received(NetworkProtocol.Packet pkt);
         public abstract void unpair();
         public virtual int pairing_timeout_msec() { return 30 * 1000; } // 30 seconds of timeout (default), subclasses that use different values should override
 

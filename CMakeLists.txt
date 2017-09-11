@@ -77,6 +77,7 @@ pkg_check_modules(GEE REQUIRED gee-0.8)
 pkg_check_modules(JSON-GLIB REQUIRED json-glib-1.0)
 pkg_check_modules(LIBPEAS REQUIRED libpeas-1.0)
 pkg_check_modules(LIBNOTIFY REQUIRED libnotify)
+pkg_check_modules(OPENSSL REQUIRED openssl)
 
 ##
 ## Libnotify
@@ -100,6 +101,7 @@ include_directories(
     ${JSON-GLIB_INCLUDE_DIRS}
     ${LIBPEAS_INCLUDE_DIRS}
     ${LIBNOTIFY_INCLUDE_DIRS}
+    ${OPENSSL_INCLUDE_DIRS}
 )
 
 set(DEPS_CFLAGS
@@ -110,6 +112,7 @@ set(DEPS_CFLAGS
 	${JSON-GLIB} ${JSON-GLIB_CFLAGS_OTHER}
 	${LIBPEAS_CFLAGS} ${LIBPEAS_CFLAGS_OTHER}
 	${LIBNOTIFY_CFLAGS} ${LIBNOTIFY_CFLAGS_OTHER}
+	${OPENSSL_CFLAGS} ${OPENSSL_CFLAGS_OTHER}
 )
 add_definitions(${DEPS_CFLAGS})
 
@@ -121,6 +124,7 @@ set(DEPS_LIBS
 	${JSON-GLIB_LIBRARIES}
 	${LIBPEAS_LIBRARIES}
 	${LIBNOTIFY_LIBRARIES}
+	${OPENSSL_LIBRARIES}
 )
 link_libraries(${DEPS_LIBS})
 
@@ -132,6 +136,7 @@ set(DEPS_LIB_PATHS
 	${JSON-GLIB_LIBRARY_DIRS}
 	${LIBPEAS_LIBRARY_DIRS}
 	${LIBNOTIFY_LIBRARY_DIRS}
+	${OPENSSL_LIBRARY_DIRS}
 )
 link_directories(${DESP_LIB_PATHS})
 
@@ -185,6 +190,7 @@ set(GCONNECT_GIR_NAME "Gconnect-${GCONNECT_VERSION_API}")
 # The path where libraries files should be searched for
 set (LIBRARY_PATH "lib")
 
+#add_subdirectory(lib/crypt)
 add_subdirectory(lib)
 add_subdirectory(daemon)
 #add_subdirectory(cli)

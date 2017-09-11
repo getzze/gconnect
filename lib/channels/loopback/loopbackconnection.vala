@@ -30,7 +30,7 @@ namespace Gconnect.LoopbackConnection {
         private NetworkProtocol.Packet identity_packet;
 
         public LoopbackLinkProvider() {
-            this.identity_packet = new NetworkProtocol.Packet.identity();
+            this.identity_packet = new NetworkProtocol.Packet.identity(false);
         }
         
         public override string name { get; protected set; default="LoopbackLinkProvider"; }
@@ -83,8 +83,8 @@ namespace Gconnect.LoopbackConnection {
         }
 
         //user actions
-        public override void user_requests_pair() { pair_status = PairStatus.PAIRED; }
-        public override void user_requests_unpair() { pair_status = PairStatus.NOT_PAIRED; }
+        public override void user_requests_pair()   { set_pair_status(PairStatus.PAIRED); }
+        public override void user_requests_unpair() { set_pair_status(PairStatus.NOT_PAIRED); }
         
     }
 } 

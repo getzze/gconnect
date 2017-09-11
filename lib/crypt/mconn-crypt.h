@@ -1,3 +1,6 @@
+
+/* ex:ts=4:sw=4:sts=4:et */
+/* -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -5,7 +8,7 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -23,32 +26,32 @@
 
 G_BEGIN_DECLS
 
-#define MCONN_TYPE_CRYPT						\
+#define MCONN_TYPE_CRYPT                        \
    (mconn_crypt_get_type())
-#define MCONN_CRYPT(obj)												\
-   (G_TYPE_CHECK_INSTANCE_CAST ((obj),									\
-								MCONN_TYPE_CRYPT,						\
-								MconnCrypt))
-#define MCONN_CRYPT_CLASS(klass)										\
-   (G_TYPE_CHECK_CLASS_CAST ((klass),									\
-							 MCONN_TYPE_CRYPT,							\
-							 MconnCryptClass))
-#define IS_MCONN_CRYPT(obj)												\
-   (G_TYPE_CHECK_INSTANCE_TYPE ((obj),									\
-								MCONN_TYPE_CRYPT))
-#define IS_MCONN_CRYPT_CLASS(klass)										\
-   (G_TYPE_CHECK_CLASS_TYPE ((klass),									\
-							 MCONN_TYPE_CRYPT))
-#define MCONN_CRYPT_GET_CLASS(obj)										\
-   (G_TYPE_INSTANCE_GET_CLASS ((obj),									\
-							   MCONN_TYPE_CRYPT,						\
-							   MconnCryptClass))
+#define MCONN_CRYPT(obj)                                                \
+   (G_TYPE_CHECK_INSTANCE_CAST ((obj),                                  \
+                                MCONN_TYPE_CRYPT,                       \
+                                MconnCrypt))
+#define MCONN_CRYPT_CLASS(klass)                                        \
+   (G_TYPE_CHECK_CLASS_CAST ((klass),                                   \
+                             MCONN_TYPE_CRYPT,                          \
+                             MconnCryptClass))
+#define IS_MCONN_CRYPT(obj)                                             \
+   (G_TYPE_CHECK_INSTANCE_TYPE ((obj),                                  \
+                                MCONN_TYPE_CRYPT))
+#define IS_MCONN_CRYPT_CLASS(klass)                                     \
+   (G_TYPE_CHECK_CLASS_TYPE ((klass),                                   \
+                             MCONN_TYPE_CRYPT))
+#define MCONN_CRYPT_GET_CLASS(obj)                                      \
+   (G_TYPE_INSTANCE_GET_CLASS ((obj),                                   \
+                               MCONN_TYPE_CRYPT,                        \
+                               MconnCryptClass))
 
-typedef struct _MconnCrypt		MconnCrypt;
+typedef struct _MconnCrypt      MconnCrypt;
 typedef struct _MconnCryptClass MconnCryptClass;
 struct _MconnCryptClass
 {
-	GObjectClass parent_class;
+    GObjectClass parent_class;
 };
 
 GType mconn_crypt_get_type (void) G_GNUC_CONST;
@@ -60,6 +63,15 @@ GType mconn_crypt_get_type (void) G_GNUC_CONST;
  * Returns: (transfer full): new object
  */
 MconnCrypt *mconn_crypt_new_for_key_path(const char *path);
+
+/**
+ * mconn_crypt_new_for_paths: (constructor)
+ * @key_path: private key path
+ * @cert_path: certificate path
+ *
+ * Returns: (transfer full): new object
+ */
+MconnCrypt *mconn_crypt_new_for_paths(const char *key_path, const char *cert_path);
 
 /**
  * mconn_crypt_unref:
@@ -93,6 +105,14 @@ GByteArray * mconn_crypt_decrypt(MconnCrypt *crypt, GBytes *data, GError **error
  * Returns: (transfer full): allocated string with public key in PEM format
  */
 gchar * mconn_crypt_get_public_key_pem(MconnCrypt *crypt);
+
+/**
+ * mconn_crypt_get_uuid:
+ * @crypt: crypt object
+ *
+ * Returns: (transfer full): allocated string with uuid
+ */
+gchar * mconn_crypt_get_uuid(MconnCrypt *crypt);
 
 G_END_DECLS
 

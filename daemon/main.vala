@@ -19,12 +19,15 @@
  */
 
 using Notify;
+using Gee;
 
 namespace Gconnect {
 
     CoreDaemon __instance = null;
     
     public class CoreDaemon: Core.Core {
+        private Gee.HashMap<int, Notify.Notification> notifications = new Gee.HashMap<int, Notify.Notification>();
+        
         public static new CoreDaemon instance() {
             if (__instance == null) {
                 var core = new CoreDaemon();
@@ -40,19 +43,26 @@ namespace Gconnect {
 
         public override void ask_pairing_confirmation(string device_id) {
             // Accept/reject pairing
-            DeviceManager.Device device = get_device(device_id);
+            DeviceManager.Device device = base.get_device(device_id);
 
             try {
                 Notify.Notification notification = new Notify.Notification ("Pairing request", "Pairing request from " + device.name, "dialog-information");
-                notification.add_action ("accept-pairing", "Accept", (notification, action) => {
+                notification.add_action ("accept-pairing", "Accept", (n, a) => {
+                    debug("Pairing was accepted by user");
                     device.accept_pairing();
-                    notification.close ();
+                    try { n.close(); } catch (Error e) {}
+                    notifications.unset(n.id);
                 });
-                notification.add_action ("reject-pairing", "Reject", (notification, action) => {
+                notification.add_action ("reject-pairing", "Reject", (n, a) => {
+                    debug("Pairing was rejected by user");
                     device.reject_pairing();
-                    notification.close ();
+                    try { n.close(); } catch (Error e) {}
+                    notifications.unset(n.id);
                 });
+                // Display notification and assign it an id
                 notification.show ();
+                // Keep the notification in memory to handle the action replies
+                notifications[notification.id] = notification;
             } catch (Error e) {
                 error("Error: %s", e.message);
             }

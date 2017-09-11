@@ -31,7 +31,7 @@ namespace Gconnect.DeviceManager {
      * 0 if they are equal, or a positive integer if the first value comes after the second.
      */
     static int higher_than(Connection.DeviceLink p1, Connection.DeviceLink p2) {
-        return p1.provider().priority - p2.provider().priority;
+        return p1.provider.priority - p2.provider.priority;
     }
     
     static string[] unique_array(string str_array, string delimiter = ",") {
@@ -54,20 +54,65 @@ namespace Gconnect.DeviceManager {
         public int protocol_version;
         public string[] incoming;
         public string[] outgoing;
+        public string encryption;
+        
+        public string to_string() {
+            string res = "%s (%s)\n".printf(name, category);
+            res += "Protocol: %d\n".printf(protocol_version);
+            res += "Incoming capabilities: %s\n".printf(string.joinv(",", incoming));
+            res += "Outgoing capabilities: %s\n".printf(string.joinv(",", outgoing));
+            res += "Encryption info: %s\n".printf(encryption);
+            return res;
+        }
     }
     
     [DBus(name = "org.gconnect.device")]
     public class Device: GLib.Object {
         /* Private fields */
-        private Gee.ArrayList<Connection.DeviceLink> _device_links;
-        private Gee.HashMap<string, Plugin.Plugin> _plugins;
-        private Gee.HashMap<string, Plugin.Plugin> _plugins_by_incoming_capability;
-        private Gee.HashSet<string> _supported_plugins;
-        private Gee.HashSet<Connection.PairingHandler> _pair_requests;
+        private Gee.ArrayList<weak Connection.DeviceLink> device_links;
+        private Gee.HashMap<string, Plugin.PluginProxy> plugins;
+        private Gee.HashMap<string, Plugin.PluginProxy> plugins_by_incoming_capability;
+        private Gee.HashSet<string> supported_plugins;
+        private Gee.HashSet<Connection.PairingHandler> pair_requests;
         private DeviceInfo info;
-        private Peas.ExtensionSet _extension_set;
+        private Peas.ExtensionSet extension_set;
         private uint bus_id = 0;
+        private weak DBusConnection? conn = null;
+        private bool allow_dbus = true;
         
+        /* Properties */
+        public string id { get; private set; }
+        public string name { 
+            get { return this.info.name;  }
+            set { 
+                if (this.info.name != value) {
+                    this.info.name = value;
+                    name_changed(this.info.name);
+                }
+            }
+        }
+        public string category { 
+            get { return this.info.category;  }
+            set { this.info.category = value; }
+        }
+        public int protocol_version { 
+            get { return this.info.protocol_version;  }
+            set { this.info.protocol_version = value; }
+        }
+        public string[] incoming_capabilities { 
+            get { return this.info.incoming;  }
+            set { this.info.incoming = value; }
+        }
+        public string[] outgoing_capabilities { 
+            get { return this.info.outgoing;  }
+            set { this.info.outgoing = value; }
+        }
+
+        public string encryption_info {
+            get { return this.info.encryption;  }
+            set { this.info.encryption = value; }
+        }
+
         /* Signals */
         public signal void reachable_changed(bool reachable);
         public signal void paired_changed(bool paired);
@@ -78,20 +123,34 @@ namespace Gconnect.DeviceManager {
         public signal void name_changed(string name);
 
         /* Constructor */
+        protected Device () {
+            device_links = new Gee.ArrayList<weak Connection.DeviceLink>();
+            plugins = new Gee.HashMap<string, Plugin.PluginProxy>();
+            plugins_by_incoming_capability = new Gee.HashMap<string, Plugin.PluginProxy>();
+            supported_plugins = new Gee.HashSet<string>();
+            pair_requests = new Gee.HashSet<Connection.PairingHandler>();
+
+            //Assume every plugin is supported until addLink is called and we can get the actual list
+            this.supported_plugins.add_all_array(Plugin.PluginManager.instance().outgoing_capabilities);
+
+            this.pairing_error.connect((c, m)=> {warning("Device pairing error: %s", m);});
+        }
+        
         /**
         * Restores the @p device from the saved configuration
         *
         * We already know it but we need to wait for an incoming DeviceLink to communicate
         */
         public Device.from_id(string device_id) {
+            this();
             this.id = device_id;
-            this.info = Config.Config.instance().get_paired_device(this.id);
-
-            //Assume every plugin is supported until addLink is called and we can get the actual list
-            this._supported_plugins = new Gee.HashSet<string>();
-            this._supported_plugins.add_all_array(Plugin.PluginManager.instance().outgoing_capabilities);
-
-            this.pairing_error.connect((c, m)=> {warning("Device pairing error: %s", m);});
+            try {
+                this.info = Config.Config.instance().get_paired_device(this.id);
+            } catch (IOError e) {
+                pairing_error("Cannot retrieve information on paired device from cache: %s".printf(e.message));
+                // TODO: tell devicelink of the problem
+                error(e.message);
+            }
         }
 
         /**
@@ -100,72 +159,27 @@ namespace Gconnect.DeviceManager {
         * We know everything but we don't trust it yet
         */
         public Device.from_link(NetworkProtocol.Packet identity, Connection.DeviceLink dl) {
+            this();
             debug("New device object");
 
             this.info = DeviceInfo();
             this.id = identity.parse_device_info(ref this.info);
 
             add_link(dl);
-
-            this.pairing_error.connect((c, m)=> {warning("Device pairing error: %s", m);});
         }
         
-        /* Properties */
-        public string id { get; private set; }
-        public string name { 
-            get {
-                return this.info.name;
-            }
-            set{ 
-                if (this.info.name != value) {
-                    this.info.name = value;
-                    name_changed(this.info.name);
-                }
-            }
-        }
-        public string category { 
-            get {
-                return this.info.category;
-            }
-            set { 
-                this.info.category = value;
-            }
-        }
-        public int protocol_version { 
-            get {
-                return this.info.protocol_version;
-            }
-            set { 
-                this.info.protocol_version = value;
-            }
-        }
-        public string[] incoming_capabilities { 
-            get {
-                return this.info.incoming;
-            }
-            set { 
-                this.info.incoming = value;
-            }
-        }
-        public string[] outgoing_capabilities { 
-            get {
-                return this.info.outgoing;
-            }
-            set { 
-                this.info.outgoing = value;
-            }
-        }
-
-        public string encryption_info { get; set; }
 
         /* Public Methods */
         public string dbus_path() { return "/modules/gconnect/devices/"+this.id; }
+        
+        [DBus (visible = false)]
+        public unowned DBusConnection dbus_connection() { return this.conn; }
         
         //Update device information
         [DBus (visible = false)]
         public void update_info(NetworkProtocol.Packet identity) {
             var old_name = this.name;
-            var dump = identity.parse_device_info(ref this.info);
+            identity.parse_device_info(ref this.info);
             if (old_name != this.name) {
                 name_changed(this.name);
             }
@@ -174,13 +188,12 @@ namespace Gconnect.DeviceManager {
         //Add and remove links
         [DBus (visible = false)]
         public void add_link(Connection.DeviceLink dl)
-                requires (!_device_links.contains(dl))
+                requires (!device_links.contains(dl))
         {
-            debug("Adding link to %s via %s.", this.id, dl.provider().name);
+            debug("Adding link to %s via %s.", this.id, dl.provider.name);
 
             dl.destroyed.connect(link_destroyed);
-
-            _device_links.add(dl);
+            device_links.add(dl);
 
             //Theoretically we will never add two links from the same provider (the provider should destroy
             //the old one before this is called), so we do not have to worry about destroying old links.
@@ -189,18 +202,18 @@ namespace Gconnect.DeviceManager {
             dl.received_packet.connect(private_received_packet);
 
             // Sort by priority (higher first)
-            _device_links.sort(higher_than);
+            device_links.sort(higher_than);
 
 //            bool capabilities_supported = this.info.outgoing.length>0 || this.info.incoming.length>0;
 //            if (capabilities_supported) {
-//                _supported_plugins = Plugin.PluginManager.instance().pluginsForCapabilities(info.incoming, info.outgoing);
+//                supported_plugins = Plugin.PluginManager.instance().pluginsForCapabilities(info.incoming, info.outgoing);
 //            } else {
-//                _supported_plugins = Plugin.PluginManager.instance().getPluginList().toSet();
+//                supported_plugins = Plugin.PluginManager.instance().getPluginList().toSet();
 //            }
 
-            reload_plugins();
+            //reload_plugins();
 
-            if (_device_links.size == 1) {
+            if (device_links.size == 1) {
                 reachable_changed(true);
             }
 
@@ -208,34 +221,36 @@ namespace Gconnect.DeviceManager {
             dl.pairing_request.connect(this.add_pairing_request);
             dl.pairing_request_expired.connect(this.remove_pairing_request);
             dl.pairing_error.connect((s, m)=> {this.pairing_error(m);});
+            
+            init_plugins();
         }
 
         [DBus (visible = false)]
         public void remove_link(Connection.DeviceLink dl) {
-            _device_links.remove(dl);
+            device_links.remove(dl);
 
-            debug("Remove link, %d links remaining.", _device_links.size);
+            debug("Remove link, %d links remaining.", device_links.size);
 
-            if (_device_links.is_empty) {
-                reload_plugins();
+            if (device_links.is_empty) {
+//                reload_plugins();
                 reachable_changed(false);
             }
         }
 
         public string[] available_links() {
             string[] sl = {};
-            foreach (var dl in _device_links) {
-                sl += dl.provider().name;
+            foreach (var dl in device_links) {
+                sl += dl.provider.name;
             }
             return sl;
         }
         
         public bool is_paired() {
-            return (this.id in Config.Config.instance().get_paired_devices());
+            return Config.Config.instance().is_paired(this.id);
         }
         
         public bool is_reachable() {
-            return !_device_links.is_empty;
+            return !device_links.is_empty;
         }
 
 //         public string[] loaded_plugins() {}
@@ -244,17 +259,17 @@ namespace Gconnect.DeviceManager {
 //         public Plugin.Plugin plugin(string name) {}
 //         void setPluginEnabled(const QString& pluginName, bool enabled);
 //         bool isPluginEnabled(const QString& pluginName) const;
-//         public string[] supported_plugins() { return _supported_plugins.to_array(); }
+//         public string[] supported_plugins() { return supported_plugins.to_array(); }
 
         public void clean_unneeded_links() {
             if (is_paired()) {
                 return;
             }
             var copy = new Gee.ArrayList<Connection.DeviceLink>();
-            copy.add_all(_device_links);
+            copy.add_all(device_links);
             foreach (var dl in copy) {
                 if (!dl.link_should_be_kept_alive()) {
-                    _device_links.remove(dl);
+                    device_links.remove(dl);
                 }
             }
         }
@@ -265,11 +280,12 @@ namespace Gconnect.DeviceManager {
         [DBus (visible = false)]
         public virtual bool send_packet(NetworkProtocol.Packet pkt)
                 requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_PAIR)
+//                requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY)
                 requires (is_paired())
         {
             if (pkt.packet_type in info.incoming) {
                 //Maybe we could block here any packet that is not an identity or a pairing packet to prevent sending non encrypted data
-                foreach (var dl in _device_links) {
+                foreach (var dl in device_links) {
                     if (dl.send_packet(pkt)) { return true;}
                 }
             } else {
@@ -285,57 +301,117 @@ namespace Gconnect.DeviceManager {
                 return;
             }
 
-            if (is_reachable()) {
+            if (!is_reachable()) {
                 this.pairing_error(_("Device not reachable"));
                 return;
             }
 
-            foreach (var dl in _device_links) {
+            foreach (var dl in device_links) {
                 dl.user_requests_pair();
             }
         }
         
         [Callback]
         public void unpair() { // from all links
-            foreach (var dl in _device_links) {
+            debug("Device links attached to %s: %d", this.id, device_links.size);
+            if (device_links.is_empty) {
+                warning("No device link to communicate with device.");
+                return;
+            }
+            foreach (var dl in device_links) {
                 dl.user_requests_unpair();
             }
-            Config.Config.instance().remove_paired_device(this.id);
+            try {
+                Config.Config.instance().remove_paired_device(this.id);
+            } catch (IOError e) {
+                warning("Could not unpair: %s", e.message);
+                return;
+            }
             paired_changed(false);
         }
         
-        [Callback]
         public void reload_plugins() {
+            deactivate_plugins();
+            activate_plugins();
+        }
+        
+        private void activate_plugins() {
+            init_plugins();
+        }
+        
+        private void deactivate_plugins() {
+            if (extension_set != null) {
+                extension_set.@foreach((ext_set, info, extension) => {
+                    (extension as Plugin.Plugin).deactivate();
+                    plugins.unset(info.get_name());
+                });
+                extension_set = null;
+            }
+            plugins.clear();
+        }
+        
+        public void init_plugins() {
             debug("Preload plugin engine");
             var engine = Plugin.PluginManager.instance().engine;
             debug("Activate all available plugins for device %s.", this.id);
-            _extension_set = new Peas.ExtensionSet(engine, typeof(Plugin.Plugin), "device", this);
-
-            _extension_set.extension_added.connect((info, extension) => {
-                debug("Activate " + info_to_string(info));
-                (extension as Plugin.Plugin).activate();
-            });
-            _extension_set.extension_removed.connect((info, extension) => {
-                (extension as Plugin.Plugin).deactivate();
-            });
+            this.extension_set = new Peas.ExtensionSet(engine, typeof(Plugin.Plugin), "device", this);
             
-            _extension_set.@foreach((ext_set, info, extension) => {
-                if (info.is_loaded()) {
+            this.extension_set.@foreach((ext_set, info, extension) => {
+                var pname = info.get_name();
+                if (!plugins.has_key(pname)) {
+                    var pp = new Plugin.PluginProxy(info, this);
+                    plugins[pname] = (owned)pp;
+                }
+                (extension as Plugin.Plugin).activate(pname);
+                debug("Activate " + info_to_string(info));
+            });
+
+            this.extension_set.extension_added.connect((info, extension) => {
+                if (is_plugin_allowed(info)) {
+                    var pname = info.get_name();
+                    if (!plugins.has_key(pname)) {
+                        var pp = new Plugin.PluginProxy(info, this);
+                        plugins[pname] = (owned)pp;
+                    }
+                    (extension as Plugin.Plugin).activate(pname);
                     debug("Activate " + info_to_string(info));
-                    (extension as Plugin.Plugin).activate();
                 }
             });
+            this.extension_set.extension_removed.connect((info, extension) => {
+                (extension as Plugin.Plugin).deactivate();
+                plugins.unset(info.get_name());
+            });
+        }
 
+        private bool is_plugin_allowed(Peas.PluginInfo info) {
+            if (info.is_loaded()) {
+                var outc = unique_array(info.get_external_data("X-Outgoing-Capabilities"));
+                if ("debug" in outc) {
+                    return true;
+                }
+                foreach (var cap in outc) {
+                    if (cap in incoming_capabilities) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        [DBus (visible = false)]
+        public Plugin.PluginProxy? get_plugin(string name) {
+            return plugins[name];
         }
 
         [Callback]
         public void accept_pairing() {
-            if (_pair_requests.is_empty) {
+            debug("Pairing was accepted by user");
+            if (pair_requests.is_empty) {
                 warning("No pair requests to accept!");
             }
             //copying because the pairing handler will be removed upon accept
             var copy = new Gee.HashSet<Connection.PairingHandler>();
-            copy.add_all(_pair_requests);
+            copy.add_all(pair_requests);
             foreach (var ph in copy) {
                 ph.accept_pairing();
             }
@@ -343,12 +419,13 @@ namespace Gconnect.DeviceManager {
 
         [Callback]
         public void reject_pairing() {
-            if (_pair_requests.is_empty) {
+            debug("Pairing was rejected by user");
+            if (pair_requests.is_empty) {
                 warning("No pair requests to accept!");
             }
             //copying because the pairing handler will be removed upon accept
             var copy = new Gee.HashSet<Connection.PairingHandler>();
-            copy.add_all(_pair_requests);
+            copy.add_all(pair_requests);
             foreach (var ph in copy) {
                 ph.reject_pairing();
             }
@@ -356,7 +433,7 @@ namespace Gconnect.DeviceManager {
         
         [Callback]
         public bool has_pairing_requests() {
-            return !_pair_requests.is_empty;
+            return !pair_requests.is_empty;
         }
 
         public string icon_name() {
@@ -368,33 +445,50 @@ namespace Gconnect.DeviceManager {
         }
         
         [DBus (visible = false)]
-        public void publish (DBusConnection conn, ref Gee.ArrayList<uint> registered) {
+        public void publish (DBusConnection conn) {
+            this.conn = conn;
             try	{
                 string path = this.dbus_path();
                 this.bus_id = conn.register_object(path, this);
-                registered.add(this.bus_id);
-                debug("Register device %s to dbus: %s(%u)", this.id, path, this.bus_id);
+                debug("Register device %s to dbus: %s", this.id, path);
 			} catch (IOError e) {
 				warning ("Could not register objects: %s", e.message);
 			}
         }
 
         [DBus (visible = false)]
-        public void unpublish (DBusConnection conn, ref Gee.ArrayList<uint> registered) {
+        public void unpublish () throws IOError {
+            if (this.conn == null) {
+                return;
+            }
+            // Unpublish plugins
+            deactivate_plugins();
+            
+            // Unpublish device
             try	{
-                if (!conn.unregister_object(this.bus_id)) {
+                if (!this.conn.unregister_object(this.bus_id)) {
 					warning("Failed to unregister object id %u", this.bus_id);
                 } else {
-                    debug("Unregister device %s from dbus.", this.id);
-                    registered.remove(this.bus_id);
+                    debug("Unregister device %s from dbus.", this.name);
                     this.bus_id = 0;
                 }
 			} catch (IOError e) {
 				warning ("Could not register objects: %s", e.message);
 			}
+            this.conn = null;
         }
 
-        /* Private methods */
+        private bool is_packet_allowed(string type, Peas.PluginInfo info) {
+            var inc = unique_array(info.get_external_data("X-Incoming-Capabilities"));
+            if ("debug" in inc) {
+                return true;
+            }
+            if (type in inc) {
+                return true;
+            }
+            return false;
+        }
+        
         [Callback]
         private void private_received_packet(NetworkProtocol.Packet pkt)
             requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_PAIR)
@@ -402,13 +496,11 @@ namespace Gconnect.DeviceManager {
             if (is_paired()) {
                 int treated = 0;
                 // TODO: use a dictionary with incoming-capabilities instead
-                _extension_set.@foreach((ext_set, info, extension) => {
-                    if (pkt.packet_type in unique_array(
-                        info.get_external_data("X-Incoming-Capabilities"))) {
-                        (extension as Plugin.Plugin).receive(pkt);
+                foreach (var pp in plugins.values) {
+                    if (pp.receive(pkt)) {
                         treated += 1;
                     }
-                });
+                }
                 if (treated == 0) {
                     warning("Discarding unsupported packet %s for device %s.", pkt.packet_type, this.name);
                 }
@@ -420,48 +512,66 @@ namespace Gconnect.DeviceManager {
         }
         
         [Callback]
-        private void link_destroyed(GLib.Object o) {
-            remove_link( (Connection.DeviceLink)o );
+        private void link_destroyed(Connection.DeviceLink sender, string device_id) {
+            if (device_id == this.id) {
+                remove_link(sender);
+            } else {
+                warning("Asking device %s to destroy link to %s, mismatch.", this.id, device_id);
+            }
         }
         
         [Callback]
         private void pair_status_changed(Connection.DeviceLink device_link, Connection.DeviceLink.PairStatus status) {
             if (status == Connection.DeviceLink.PairStatus.NOT_PAIRED) {
-                Config.Config.instance().remove_paired_device(this.id);
+                try {
+                    Config.Config.instance().remove_paired_device(this.id);
+                } catch (IOError e) {
+                    pairing_error("Cannot remove paired device from cache: %s".printf(e.message));
+                    // TODO: tell devicelink of the problem
+                    paired_changed(true);
+                }
 
-                foreach (var dl in _device_links) {
+                foreach (var dl in device_links) {
                     if (dl != device_link) {
-                        dl.pair_status = Connection.DeviceLink.PairStatus.NOT_PAIRED;
+                        dl.set_pair_status(Connection.DeviceLink.PairStatus.NOT_PAIRED);
                     }
                 }
+                deactivate_plugins();
             } else {
-                Config.Config.instance().add_paired_device(this.id, this.info);
+                try {
+                    Config.Config.instance().add_paired_device(this.id, this.info);
+                } catch (IOError e) {
+                    pairing_error("Cannot add paired device to cache: %s".printf(e.message));
+                    // TODO: tell devicelink of the problem
+                    error(e.message);
+                }
+                activate_plugins();
             }
 
-            reload_plugins(); // Will load/unload plugins
 
             bool is_trusted = (status == Connection.DeviceLink.PairStatus.PAIRED);
+            GLib.info("Device %s paired: %s", this.id, is_trusted.to_string());
             paired_changed(is_trusted);
             assert(is_trusted == this.is_paired());
         }
 
         [Callback]
         private void add_pairing_request(Connection.PairingHandler handler) {
-            bool was_empty = _pair_requests.is_empty;
-            _pair_requests.add(handler);
+            bool was_empty = pair_requests.is_empty;
+            pair_requests.add(handler);
 
-            if (was_empty != _pair_requests.is_empty) {
-                has_pairing_requests_changed(!_pair_requests.is_empty);
+            if (was_empty != pair_requests.is_empty) {
+                has_pairing_requests_changed(!pair_requests.is_empty);
             }
         }
 
         [Callback]
         private void remove_pairing_request(Connection.PairingHandler handler) {
-            bool was_empty = _pair_requests.is_empty;
-            _pair_requests.remove(handler);
+            bool was_empty = pair_requests.is_empty;
+            pair_requests.remove(handler);
 
-            if (was_empty != _pair_requests.is_empty) {
-                has_pairing_requests_changed(!_pair_requests.is_empty);
+            if (was_empty != pair_requests.is_empty) {
+                has_pairing_requests_changed(!pair_requests.is_empty);
             }
         }
         

@@ -29,22 +29,107 @@ namespace Gconnect.Plugin {
         /* Unowned (weak) reference to the Device */
         public abstract unowned DeviceManager.Device device { get; construct set; }
 
-        /* Send a request packet */
-        public virtual bool request(NetworkProtocol.Packet pkt) {
-            return this.device.send_packet(pkt);
-        }
-
-        /* Treat a received packet */
-        public abstract void receive(NetworkProtocol.Packet np);
-
-        /* DBus path */
-        public virtual string? dbus_path() { return null; }
-
-        /* The "constructor" */
-        public abstract void activate();
+        /* The "constructor" with the plugin name as argument */
+        public abstract void activate(string name);
 
         /* The "destructor" */
         public abstract void deactivate();
+    }
+    
+    public class PluginProxy : GLib.Object {
+        private weak DeviceManager.Device device;
+        private weak Peas.PluginInfo plugin_info;
+        
+        private uint bus_id = 0;
+        public unowned DBusConnection dbus_connection() {
+            return device.dbus_connection();
+        }
+
+        public string name { get { return plugin_info.get_name();} }
+        
+        public signal void received_packet(NetworkProtocol.Packet pkt);
+        
+        public PluginProxy(Peas.PluginInfo pinfo, DeviceManager.Device dev) {
+            this.device = dev;
+            this.plugin_info = pinfo;
+        }
+
+        public void log (string mess) {
+            info("%s : %s", this.name, mess);
+        }
+        
+        public string dbus_path() { return this.device.dbus_path() + "/" + this.name;}
+        
+        private bool is_packet_allowed(string type) {
+            string delimiter = ",";
+            var inc = new Gee.HashSet<string>();
+            inc.add_all_array(plugin_info.get_external_data("X-Incoming-Capabilities").split(delimiter));
+
+            if ("debug" in inc) {
+                return true;
+            }
+            if (type in inc) {
+                return true;
+            }
+            return false;
+        }
+        
+        public bool receive (NetworkProtocol.Packet pkt) {
+            if (is_packet_allowed(pkt.packet_type)) {
+                received_packet(pkt);
+                return true;
+            }
+            return false;
+        }
+        
+        public void request (NetworkProtocol.Packet pkt) {
+            if (this.device.is_paired()) {
+                this.device.send_packet(pkt);
+            }
+        }
+        
+        public void register_object(DBusInterfaceInfo interface_info,
+                                    Closure? method_call_closure,
+                                    Closure? get_property_closure,
+                                    Closure? set_property_closure) throws Error {
+            try {
+                var conn = dbus_connection();
+                this.bus_id = conn.register_object_with_closures(
+                    dbus_path(),
+                    interface_info,
+                    method_call_closure,
+                    get_property_closure,
+                    set_property_closure);
+            } catch (IOError e) {
+                warning("Could not register plugin to dbus: %s", e.message);
+            }
+        }
+        
+        public void unpublish() throws Error {
+            try	{
+                var conn = dbus_connection();
+                if (!conn.unregister_object(this.bus_id)) {
+					debug("Failed to unregister object id %u".printf(this.bus_id));
+                } else {
+                    debug("Unregister plugin %s from dbus.", this.name);
+                    this.bus_id = 0;
+                }
+			} catch (IOError e) {
+				warning ("Could not unregister objects: %s", e.message);
+			}
+        }
+
+        public void emit_signal(string iname, string name, GLib.Variant var) throws Error {
+            if (this.bus_id == 0) {
+                warning("Could not emit signal because the connection is closed");
+            }
+            try {
+                var conn = dbus_connection();
+                conn.emit_signal(null, dbus_path(), iname, name, var);
+            } catch (IOError e) {
+                warning("Could not emit signal for plugin: %s", e.message);
+            }
+        }
     }
 
     [DBus(name = "org.gconnect.pluginmanager")]
@@ -58,7 +143,7 @@ namespace Gconnect.Plugin {
                 var plugins_types = new Gee.HashSet<string> ();
                 foreach (Peas.PluginInfo plugin in engine.get_plugin_list()) {
                     if (plugin.is_loaded()) {
-                        plugins_types.add(plugin.get_external_data("X-Outgoing-Capabilities"));
+                        plugins_types.add_all_array(plugin.get_external_data("X-Outgoing-Capabilities").split(","));
                     }
                 };
                 return plugins_types.to_array();
@@ -71,7 +156,7 @@ namespace Gconnect.Plugin {
                 var plugins_types = new Gee.HashSet<string> ();
                 foreach (Peas.PluginInfo plugin in engine.get_plugin_list()) {
                     if (plugin.is_loaded()) {
-                        plugins_types.add(plugin.get_external_data("X-Incoming-Capabilities"));
+                        plugins_types.add_all_array(plugin.get_external_data("X-Incoming-Capabilities").split(","));
                     }
                 };
                 return plugins_types.to_array();
@@ -82,7 +167,7 @@ namespace Gconnect.Plugin {
         public string dbus_path() { return "/modules/gconnect/plugins/"; }
 
         [DBus (visible = false)]
-        public Peas.Engine engine { get; private set;}
+        internal Peas.Engine engine { get; private set;}
 
         public PluginManager() {
             /* Get the default engine */

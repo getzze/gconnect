@@ -8,21 +8,29 @@ namespace Gconnect.Config {
         return path;
     }
 
+    Config __instance = null;
+
     public class Config : Object {
         private GLib.Settings settings;
         private GLib.Settings root_devices_settings;
-        private Gee.HashMap<string,GLib.Settings> devices_settings;
+        private Gee.HashMap<string, GLib.Settings> devices_settings;
         private string _device_id;
         private string _device_category = "desktop";
         
-//         public Crypt crypt { get; private set; default = null; }
+        internal Mconn.Crypt crypt { get; private set; default = null; }
+        public TlsCertificate certificate { get; private set; default = null; }
+        
         public string device_name {get; set;}
 
         public string device_id {
             get {
-                string host_name = Environment.get_host_name();
-                string user = Environment.get_user_name();
-                _device_id = @"gconnect:$user@$host_name";
+                if (false) {
+                    string host_name = Environment.get_host_name();
+                    string user = Environment.get_user_name();
+                    _device_id = @"gconnect:$user@$host_name";
+                    return _device_id;
+                }
+                _device_id = this.crypt.get_uuid();
                 return _device_id;
             }
         }       
@@ -34,98 +42,90 @@ namespace Gconnect.Config {
         private Config() {
             init_user_dirs();
 
-// 			this.crypt = init_crypto();
+ 			init_crypto();
 
             this.settings = new Settings("org.gconnect");
             this.settings.bind("name", this, "device_name", SettingsBindFlags.DEFAULT);
             this.root_devices_settings = new Settings("org.gconnect.paired-devices");
-            
-//            bool dbg = true;
-//            if (dbg) {
-//                var dev_info = DeviceManager.DeviceInfo();
-//                dev_info.name = this.device_name;
-//                dev_info.category = this.device_category;
-//                dev_info.protocol_version = NetworkProtocol.PROTOCOL_VERSION;
-//                dev_info.incoming = {};
-//                dev_info.outgoing = {};
-                
-//                this.add_paired_device(this.device_id, dev_info);
-//            }
+            this.devices_settings = new Gee.HashMap<string, GLib.Settings>();
+            load_paired_devices();
         }
 
         public static Config instance() {
-            var c = new Config();
-            return c;
+            if (__instance == null) {
+                var conf = new Config();
+                __instance = conf;
+            }
+            return __instance;
         }
 
         public string[] get_paired_devices() {
             return this.settings.get_strv("paired-devices");
         }       
 
+        public bool is_paired(string id) {
+            var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
+            return paired.contains(id);
+        }       
+
         public string[] get_auto_pair_devices() {
             return this.settings.get_strv("auto-pair-devices");
         }       
 
-        public void add_paired_device (string raw_id, DeviceManager.DeviceInfo dev_info) {
+        public void add_paired_device (string raw_id, DeviceManager.DeviceInfo dev_info) throws IOError {
             // Use a gsettings-compatible id.
             string id = parse_dbus_path(raw_id);
 
             var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
             
-            bool res = false;
             if (!paired.contains(id)) {
-                res = paired.add(id);
+                paired.add(id);
             }
 
-            if (res) {
-                var dev = new Settings.with_path("org.gconnect.device", "/apps/gconnect/devices/" + id + "/");
-                dev.set_string("id", raw_id);
-                dev.set_string("name", dev_info.name);
-                dev.set_string("type", dev_info.category);
-                dev.set_int("protocol-version", dev_info.protocol_version);
-                dev.set_strv("incoming-capabilities", dev_info.incoming);
-                dev.set_strv("outgoing-capabilities", dev_info.outgoing);
-                devices_settings[id] = dev;
+            var dev = new Settings.with_path("org.gconnect.device", "/apps/gconnect/devices/" + id + "/");
+            dev.set_string("id", raw_id);
+            dev.set_string("name", dev_info.name);
+            dev.set_string("type", dev_info.category);
+            dev.set_int("protocol-version", dev_info.protocol_version);
+            dev.set_strv("incoming-capabilities", dev_info.incoming);
+            dev.set_strv("outgoing-capabilities", dev_info.outgoing);
+            dev.set_string("encryption-info", dev_info.encryption);
+            devices_settings[id] = dev;
+            dev.apply();
 
-                this.settings.set_strv("paired-devices", paired.to_array());
-                message("New trusted device added %s: %s (%s=%d), %s, %s",
-                        dev.get_string("id"),
-                        dev.get_string("name"),
-                        dev.get_string("type"),
-                        dev.get_int("protocol-version"),
-                        string.join(",", dev.get_strv("incoming-capabilities")),
-                        string.join(",", dev.get_strv("outgoing-capabilities"))
-                );
-            } else {
-                message("Could not add id %s to the paired devices list: %s", 
-                        id, string.joinv(";", paired.to_array()));
-            }
+            this.settings.set_strv("paired-devices", paired.to_array());
+            this.settings.apply();
+            message("New trusted device added:\n%s", dev_info.to_string());
         }
         
-        public void remove_paired_device (string raw_id) {
+        public void remove_paired_device (string raw_id) throws IOError {
             // Use a gsettings-compatible id.
             string id = parse_dbus_path(raw_id);
 
             var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
-            bool res = paired.remove(id);
-            if (res) {
-                var dev = devices_settings[id];
-                dev.reset("id");
-                dev.reset("name");
-                dev.reset("type");
-                dev.reset("protocol-version");
-                dev.reset("incoming-capabilities");
-                dev.reset("outgoing-capabilities");
-                devices_settings.unset(id);
-                
-                this.settings.set_strv("paired-devices", paired.to_array());
-            } else {
-                message("Could not remove id %s from the paired devices list: %s",
+            if (!paired.contains(id)) {
+                return;
+            }
+            if (!paired.remove(id)) {
+                throw new IOError.FAILED("Could not remove id %s from the paired devices list: %s",
                         id, string.joinv(";", paired.to_array()));
             }
+            var dev = devices_settings[id];
+            dev.reset("id");
+            dev.reset("name");
+            dev.reset("type");
+            dev.reset("protocol-version");
+            dev.reset("incoming-capabilities");
+            dev.reset("outgoing-capabilities");
+            dev.reset("encryption-info");
+            dev.apply();
+            devices_settings.unset(id);
+            
+            this.settings.set_strv("paired-devices", paired.to_array());
+            this.settings.apply();
         }
         
-        public DeviceManager.DeviceInfo get_paired_device(string raw_id) {
+        public DeviceManager.DeviceInfo get_paired_device(string raw_id) throws IOError {
             // Use a gsettings-compatible id.
             string id = parse_dbus_path(raw_id);
 
@@ -140,12 +140,21 @@ namespace Gconnect.Config {
                 dev_info.protocol_version = dev.get_int("protocol-version");
                 dev_info.incoming = dev.get_strv("incoming-capabilities");
                 dev_info.outgoing = dev.get_strv("outgoing-capabilities");
+                dev_info.encryption = dev.get_string("encryption-info");
             } else {
-                message("Could not retrieve device id %s from the paired devices list: %s",
+                throw new IOError.FAILED("Could not retrieve device id %s from the paired devices list: %s",
                         id, string.joinv(";", paired.to_array()));
             }
             
             return dev_info;
+        }
+        
+        private void load_paired_devices() {
+            var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
+            foreach (var id in paired) {
+                var dev = new Settings.with_path("org.gconnect.device", "/apps/gconnect/devices/" + id + "/");
+                devices_settings[id] = dev;
+            }
         }
         
         public static string get_storage_dir() {
@@ -176,9 +185,26 @@ namespace Gconnect.Config {
             DirUtils.create_with_parents(get_config_dir(), 0700);
         }
 
-//         private static Crypt init_crypto() {
-//             string key_path = get_storage_dir() + "/private.pem";
-//             return new Crypt.for_key_path(key_path);
-//         }
+        private static string get_private_key_path() {
+            return Path.build_filename(get_storage_dir(), "/private.pem");
+        }
+        
+        private static string get_certificate_path() {
+            return Path.build_filename(get_storage_dir(), "/certificate.pem");
+        }
+        
+        public string get_public_key_pem() {
+//            var str = "-----BEGIN PUBLIC KEY-----\n\n-----END PUBLIC KEY-----\n";
+            var str = crypt.get_public_key_pem();
+            return str;
+        }
+        
+        private void init_crypto() {
+            string key_path = get_private_key_path();
+            string cert_path = get_certificate_path();
+            crypt = new Mconn.Crypt.for_paths(key_path, cert_path);
+            certificate = new TlsCertificate.from_files(get_certificate_path(), get_private_key_path());
+            GLib.info("Certificate loaded from pem file.");
+        }
     }
 }
