@@ -26,20 +26,26 @@ using Gee;
 namespace Gconnect.LanConnection {
 
     public class LanDeviceLink : Connection.DeviceLink {
-        private SocketConnection conn;
+        private weak Socket socket;
+//        private SocketConnection conn;
+        private TlsConnection tls_conn;
+        private IOStream stream;
         private DataOutputStream dos;
         private DataInputStream dis;
         private uint source_id = 0;
         private ConnectionStarted connection_source;
-//        private QHostAddress mHostAddress;
+        private InetSocketAddress host_address;
+        public bool TLS { get; set; default = false; }
+        public string peer_cert;
 
         private ArrayList<LanConnection.LanPairingHandler> pairing_handlers;
         
         public override string name { get; protected set; default="LanLink";}
 
-        public LanDeviceLink(string device_id, Connection.LinkProvider parent, SocketConnection sc, ConnectionStarted origin) {
+        public LanDeviceLink(string device_id, Connection.LinkProvider parent, Socket sock, 
+                                IOStream stream, ConnectionStarted origin) {
             base(device_id, parent);
-            reset(sc, origin);
+            reset(sock, stream, origin);
         }
             
         private void clean () {
@@ -47,7 +53,7 @@ namespace Gconnect.LanConnection {
                 Source.remove(source_id);
                 source_id = 0;
             }
-            if (this.conn != null) {
+            if (this.stream != null) {
                 try {
                     if (!this.dos.is_closed()) { this.dos.close();}
                 } catch (IOError e) {
@@ -64,7 +70,7 @@ namespace Gconnect.LanConnection {
                 }
 
                 try {
-                    if (!this.conn.is_closed()) { this.conn.close();}
+                    if (!this.stream.is_closed()) { this.stream.close();}
                 } catch (IOError e) {
                     warning("Error closing connection: %s\n", e.message);
                 }
@@ -76,7 +82,7 @@ namespace Gconnect.LanConnection {
             this.destroyed(device_id);
         }
 
-        public void reset(SocketConnection sc, ConnectionStarted origin) {
+        public void reset(Socket sock, IOStream stream, ConnectionStarted origin) {
             this.clean();
             
             this.connection_source = origin;
@@ -85,47 +91,79 @@ namespace Gconnect.LanConnection {
             //When the link provider destroys us,
             //the socket (and the reader) will be
             //destroyed as well
-            this.conn = sc;
-            var addr = (InetSocketAddress)this.conn.get_remote_address();
-            try {
-                this.conn.connect(addr);
-            } catch (IOError e) {
-                error("Error reconnecting to %s: %s", addr.address.to_string(), e.message);
+            this.socket = sock;
+            this.stream = stream;
+            
+            this.tls_conn = stream as TlsConnection;
+            if (this.tls_conn != null && this.tls_conn is TlsConnection) {
+                TLS = true;
+            } else {
+                TLS = false;
             }
-            this.dos = new DataOutputStream (this.conn.output_stream);
-            this.dis = new DataInputStream (this.conn.input_stream);
+
+            host_address = (InetSocketAddress)this.socket.get_remote_address();
+//            try {
+//                this.conn.connect(host_address);
+//            } catch (IOError e) {
+//                warning("Error reconnecting to %s: %s", host_address.address.to_string(), e.message);
+//                this.close();
+//            }
+            
+            this.dos = new DataOutputStream (this.stream.output_stream);
+            this.dis = new DataInputStream (this.stream.input_stream);
             // messages end with \n\n
 //            this.dis.set_newline_type(DataStreamNewlineType.LF);
             // Watch for incoming messages
-            SocketSource source = this.conn.socket.create_source(IOCondition.IN);
+            SocketSource source = this.socket.create_source(IOCondition.IN | IOCondition.ERR | IOCondition.HUP);
             source.set_callback( (src, cond) => {
-                if (!(IOCondition.HUP in cond)) {
+//                debug("Condition found: %u", cond);
+                if (cond == IOCondition.IN) {
                     this.data_received();
+//                } else {
+//                    debug("Condition found: %u", cond);
                 }
                 return GLib.Source.CONTINUE; // continue watching
             });
             source_id = source.attach(MainContext.default ());
             
-//            QString certString = KdeConnectConfig::instance()->getDeviceProperty(deviceId(), QStringLiteral("certificate"));
-            string? cert = null;
-//            set_and_announce_pair_status(cert==null? Connection.DeviceLink.PairStatus.NOT_PAIRED : Connection.DeviceLink.PairStatus.PAIRED);
-            // If already paired
-            bool is_paired = Config.Config.instance().is_paired(device_id);
-            set_and_announce_pair_status(is_paired? Connection.DeviceLink.PairStatus.PAIRED : Connection.DeviceLink.PairStatus.NOT_PAIRED);
+            if (TLS) {
+                debug("DeviceLink is a TlsConnection");
+                this.peer_cert = tls_conn.get_peer_certificate().certificate_pem;
+                try {
+                    tls_conn.handshake();
+                } catch (Error e) {
+                    warning("Could not realize handshake with %s: %s", device_id, e.message);
+                }
+                
+                // If already paired
+                bool has_cert = Config.Config.instance().has_certificate(device_id);
+                set_and_announce_pair_status(has_cert? Connection.DeviceLink.PairStatus.PAIRED : Connection.DeviceLink.PairStatus.NOT_PAIRED);
+            } else {
+                bool is_paired = Config.Config.instance().is_paired(device_id);
+                set_and_announce_pair_status(is_paired? Connection.DeviceLink.PairStatus.PAIRED : Connection.DeviceLink.PairStatus.NOT_PAIRED);
+            }
         }
         
         public override void set_pair_status(Connection.DeviceLink.PairStatus status) {
-//            if (status == PairStatus.PAIRED && mSocketLineReader->peerCertificate().isNull()) {
-            if (false) {
-                pairing_error("This device cannot be paired because it is running an old version of KDE Connect.");
-                return;
-            }
-
-            set_and_announce_pair_status(status);
-            if (status == Connection.DeviceLink.PairStatus.PAIRED) {
-                assert(Config.Config.instance().is_paired(device_id));
-//                Q_ASSERT(!mSocketLineReader->peerCertificate().isNull());
-//                KdeConnectConfig::instance()->setDeviceProperty(deviceId(), QStringLiteral("certificate"), mSocketLineReader->peerCertificate().toPem());
+            if (TLS) {
+                var peer_cert = tls_conn.get_peer_certificate().certificate_pem;
+//                var peer_cert = this.peer_cert;
+                if (status == Connection.DeviceLink.PairStatus.PAIRED && peer_cert == null) {
+                    pairing_error("This device cannot be set to paired because it is running an old version of KDE Connect.");
+                    return;
+                }
+                set_and_announce_pair_status(status);
+                if (status == Connection.DeviceLink.PairStatus.PAIRED) {
+                    assert(Config.Config.instance().is_paired(device_id));
+                    // Store certificate
+                    assert(peer_cert != null);
+                    assert(Config.Config.instance().set_certificate_for_device(device_id, peer_cert));
+                }
+            } else {
+                set_and_announce_pair_status(status);
+                if (status == Connection.DeviceLink.PairStatus.PAIRED) {
+                    assert(Config.Config.instance().is_paired(device_id));
+                }
             }
         }
 
@@ -137,7 +175,8 @@ namespace Gconnect.LanConnection {
                 yield dos.write_all_async(sent.data, Priority.DEFAULT_IDLE, null, out len);
                 debug("Packet sent: %s", sent);
             } catch (IOError e) {
-                error("Error sending packet: %s\n", e.message);
+                warning("Error receiving packet: %s", e.message);
+                this.close();
             }
         }
         
@@ -162,9 +201,9 @@ namespace Gconnect.LanConnection {
 //        }
 
         public override void user_requests_pair() {
-//            if (mSocketLineReader->peerCertificate().isNull()) {
-            if (false) {
-                pairing_error("This device cannot be paired because it is running an old version of KDE Connect.");
+            if (TLS && tls_conn.get_peer_certificate() == null) {
+//            if (TLS && this.peer_cert == null) {
+                pairing_error("This device cannot be asked to pair because it is running an old version of KDE Connect.");
             } else {
                 ((LanLinkProvider)this.provider).user_requests_pair(device_id);
             }
@@ -179,15 +218,12 @@ namespace Gconnect.LanConnection {
         private async void data_received() {
             string data = null;
             try {
-//                debug("Wait for something");
-                data = yield dis.read_line_utf8_async(Priority.HIGH_IDLE);
+                data = yield dis.read_line_utf8_async(Priority.DEFAULT_IDLE);
             } catch (IOError e) {
                 warning("Error receiving packet: %s", e.message);
-                if ("Stream has outstanding operation" in e.message) {
-                    dis.clear_pending();
-                    warning("Trying to clear pending operations.");
-                }
+                this.close();
             }
+
             if (data == null) {
                 return;
             }

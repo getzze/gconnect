@@ -55,6 +55,7 @@ namespace Gconnect.LanConnection {
         public const uint16 MIN_TCP_PORT = 1716;
         public const uint16 MAX_TCP_PORT = 1764;
         private uint16 tcp_port;
+        private bool SSL = false;
 
         // Private attributes
         private SocketService server;
@@ -104,9 +105,9 @@ namespace Gconnect.LanConnection {
             client.set_enable_proxy(false);
             // Used to shutdown the client
             client_cancellable = new Cancellable ();
-            if (NetworkProtocol.PROTOCOL_VERSION >= MIN_VERSION_WITH_SSL_SUPPORT) {
+            if (SSL && NetworkProtocol.PROTOCOL_VERSION >= MIN_VERSION_WITH_SSL_SUPPORT) {
                 client.set_tls(true);
-                client.set_tls_validation_flags(TlsCertificateFlags.VALIDATE_ALL);
+                client.set_tls_validation_flags(TlsCertificateFlags.UNKNOWN_CA);
             }
             
             server = new SocketService();
@@ -115,7 +116,10 @@ namespace Gconnect.LanConnection {
             server_cancellable.cancelled.connect (() => {
                 server.stop ();
             });
-            server.incoming.connect(on_server_connection);
+            server.incoming.connect((s, conn, source)=> {
+                on_server_connection(conn);
+                return false; // continue listenning
+            });
             server.set_backlog(10);
             
         }
@@ -189,27 +193,23 @@ namespace Gconnect.LanConnection {
 //            //});
         }
         
-        public static void configure_socket(Socket sock) {
+        public static void configure_socket(Socket sock) throws Error {
             //Posix.IPProto.TCP = 6
             //Posix.TCP_KEEPIDLE = 4
             //Posix.TCP_KEEPINTVL = 5
             //Posix.TCP_KEEPCNT = 6
-            try {
-                // time to start sending keepalive packets (seconds)
-                int max_idle = 10;
-                sock.set_option(6, 4, max_idle);
-                // interval between keepalive packets after the initial period (seconds)
-                int interval = 5;
-                sock.set_option(6, 5, interval);
-                // number of missed keepalive packets before disconnecting
-                int count = 3;
-                sock.set_option(6, 6, count);
+            // time to start sending keepalive packets (seconds)
+            int max_idle = 10;
+            sock.set_option(6, 4, max_idle);
+            // interval between keepalive packets after the initial period (seconds)
+            int interval = 5;
+            sock.set_option(6, 5, interval);
+            // number of missed keepalive packets before disconnecting
+            int count = 3;
+            sock.set_option(6, 6, count);
 
-                // enable keepalive
-                sock.set_keepalive(true);
-            } catch (Error e) {
-                error("Error configuring the socket: %s", e.message);
-            }
+            // enable keepalive
+            sock.set_keepalive(true);
         }
 
         // Public slots
@@ -219,11 +219,7 @@ namespace Gconnect.LanConnection {
             try {
                 bool success = udp_socket.bind(this.udp_address, true);  // allow_reuse=true
                 assert(success);
-                SocketSource source = udp_socket.create_source(IOCondition.IN);
-                source.set_callback( (src, cond) => {
-                    return this.on_udp_socket_connection(src, cond);
-                });
-                udp_source_id = source.attach(MainContext.default ());
+                start_udp_watch();
             } catch (Error e) {
                 error("Could not start udp socket: " + e.message);
             }            
@@ -248,10 +244,7 @@ namespace Gconnect.LanConnection {
         [Callback]
         public override void on_stop() {
             debug("... LanLinkProvider on stop");
-            if (udp_source_id > 0) {
-                Source.remove(udp_source_id);
-                udp_source_id = 0;
-            }
+            stop_udp_watch();
             udp_socket.close();
             
             server.stop();
@@ -281,7 +274,11 @@ namespace Gconnect.LanConnection {
                         "Starting client ssl (but I'm the server TCP socket)"
                 );
 
-                encrypted(conn, id, origin);
+                try {
+                    yield encrypted(conn, id, origin);
+                } catch (Error e) {
+                    warning("Could not initiate the TLS connection: %s", e.message);
+                }
 //                connect(socket, &QSslSocket::encrypted, this, &LanLinkProvider::encrypted);
 //                if (is_device_paired) {
 //                    connect(socket, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrors(QList<QSslError>)));
@@ -295,117 +292,94 @@ namespace Gconnect.LanConnection {
                 if (!others_allow_encryption) {
                     warning("%s is using an old protocol version, no encryption.", dev_id);
                 }
-                add_link(dev_id, conn, id, origin);
+                add_link(dev_id, conn.socket, conn, id, origin);
             }
         }
 
-        private async void encrypted(SocketConnection conn, NetworkProtocol.Packet id, ConnectionStarted origin) {
+        private async void encrypted(SocketConnection conn, NetworkProtocol.Packet id, ConnectionStarted origin) throws Error {
 
             // TODO: transfer conn.IOStream to a TlsClientConnection or TlsServerConnection
             if (origin == ConnectionStarted.LOCALLY) {
-                var addr = conn.get_remote_address ();
-                try {
-                    debug("Allow TLS connections");
-//                    client.set_tls(true);
-//                    TlsClientConnection tls_conn = (TlsClientConnection)conn;
-                    var tls_conn = TlsClientConnection.@new(conn, null);
-                    tls_conn.accept_certificate.connect((s, cert, e)=> {
-                        switch (e) {
-                        case TlsCertificateFlags.UNKNOWN_CA:
-                            debug("TLS error: %s", TlsCertificateFlags.UNKNOWN_CA.to_string());
-                            break;
-                        case TlsCertificateFlags.BAD_IDENTITY:
-                            debug("TLS error: %s", TlsCertificateFlags.BAD_IDENTITY.to_string());
-                            break;
-                        case TlsCertificateFlags.NOT_ACTIVATED:
-                            debug("TLS error: %s", TlsCertificateFlags.NOT_ACTIVATED.to_string());
-                            break;
-                        case TlsCertificateFlags.EXPIRED:
-                            debug("TLS error: %s", TlsCertificateFlags.EXPIRED.to_string());
-                            break;
-                        case TlsCertificateFlags.REVOKED:
-                            debug("TLS error: %s", TlsCertificateFlags.REVOKED.to_string());
-                            break;
-                        case TlsCertificateFlags.INSECURE:
-                            debug("TLS error: %s", TlsCertificateFlags.INSECURE.to_string());
-                            break;
-                        case TlsCertificateFlags.GENERIC_ERROR:
-                            debug("TLS error: %s", TlsCertificateFlags.GENERIC_ERROR.to_string());
-                            break;
-                        case TlsCertificateFlags.VALIDATE_ALL:
-                            debug("TLS error: %s", TlsCertificateFlags.VALIDATE_ALL.to_string());
-                            break;
-                        }
-                        return false;
-                    });
-                    
-    //                conn = yield client.connect_to_host_async(sender.to_string(), remote_tcp_port, client_cancellable);
-                    configure_tls_connection( tls_conn, id.get_device_id());
-                } catch (Error e) {
-                    error("Error with TLS connection: %s\n", e.message);
-                } finally {
-                    client.set_tls(false);
+                var dev_id = id.get_device_id();
+                debug("Start TLS server connection");
+                var config = Config.Config.instance();
+                var cert = config.certificate;
+                var tls_conn = TlsServerConnection.@new(conn, cert);
+                tls_conn.set_require_close_notify(false);
+                tls_conn.authentication_mode = TlsAuthenticationMode.REQUIRED;
+//                    tls_conn.authentication_mode = TlsAuthenticationMode.REQUESTED;
+                tls_conn.accept_certificate.connect(accept_certificate_error);
+
+                debug("Start handshake");
+//                bool res = true;
+                bool res = yield tls_conn.handshake_async();
+
+                if (res) {
+                    debug("Socket succesfully established an SSL connection");
+                    add_link(dev_id, conn.socket, tls_conn, id, origin);
+                } else {
+                    warning("Could not realize the handshake.");
                 }
-
             }
-
-//            QSslSocket* socket = qobject_cast<QSslSocket*>(sender());
-//            if (!socket) return;
-//            disconnect(socket, &QSslSocket::encrypted, this, &LanLinkProvider::encrypted);
-//            disconnect(socket, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrors(QList<QSslError>)));
-
-//            Q_ASSERT(socket->mode() != QSslSocket::UnencryptedMode);
-//            LanDeviceLink::ConnectionStarted connectionOrigin = (socket->mode() == QSslSocket::SslClientMode)? LanDeviceLink::Locally : LanDeviceLink::Remotely;
-
-//            NetworkPackage* receivedPackage = receivedIdentityPackages[socket].np;
-//            const QString& deviceId = receivedPackage->get<QString>(QStringLiteral("deviceId"));
-            debug("Socket succesfully stablished an SSL connection");
-//            add_link(dev_id, tls_conn, id, origin);
         }
 
         [Callback]
-        public void connect_error() {
-//            QSslSocket* socket = qobject_cast<QSslSocket*>(sender());
-//            if (!socket) return;
-//            disconnect(socket, &QAbstractSocket::connected, this, &LanLinkProvider::connected);
-//            disconnect(socket, SIGNAL(error(QAbstractSocket::SocketError)), this, SLOT(connectError()));
-
-//            qCDebug(KDECONNECT_CORE) << "Fallback (1), try reverse connection (send udp packet)" << socket->errorString();
-//            NetworkPackage np(QLatin1String(""));
-//            NetworkPackage::createIdentityPackage(&np);
-//            np.set(QStringLiteral("tcpPort"), mTcpPort);
-//            mUdpSocket.writeDatagram(np.serialize(), receivedIdentityPackages[socket].sender, UDP_PORT);
-
-//            //The socket we created didn't work, and we didn't manage
-//            //to create a LanDeviceLink from it, deleting everything.
-//            delete receivedIdentityPackages.take(socket).np;
-//            delete socket;
+        public bool accept_certificate_error(TlsConnection sender, TlsCertificate cert, TlsCertificateFlags errors) {
+//            debug("Accept certificate: %s", cert.certificate_pem);
+            debug("Accept peer certificate");
+            switch (errors) {
+            case TlsCertificateFlags.UNKNOWN_CA:
+                debug("TLS error: %s", TlsCertificateFlags.UNKNOWN_CA.to_string());
+                break;
+            case TlsCertificateFlags.BAD_IDENTITY:
+                debug("TLS error: %s", TlsCertificateFlags.BAD_IDENTITY.to_string());
+                break;
+            case TlsCertificateFlags.NOT_ACTIVATED:
+                debug("TLS error: %s", TlsCertificateFlags.NOT_ACTIVATED.to_string());
+                break;
+            case TlsCertificateFlags.EXPIRED:
+                debug("TLS error: %s", TlsCertificateFlags.EXPIRED.to_string());
+                break;
+            case TlsCertificateFlags.REVOKED:
+                debug("TLS error: %s", TlsCertificateFlags.REVOKED.to_string());
+                break;
+            case TlsCertificateFlags.INSECURE:
+                debug("TLS error: %s", TlsCertificateFlags.INSECURE.to_string());
+                break;
+            case TlsCertificateFlags.GENERIC_ERROR:
+                debug("TLS error: %s", TlsCertificateFlags.GENERIC_ERROR.to_string());
+                break;
+            case TlsCertificateFlags.VALIDATE_ALL:
+                debug("TLS error: %s", TlsCertificateFlags.VALIDATE_ALL.to_string());
+                break;
+            }
+            return true;
         }
         
         // Private slots
         [Callback]
-        private bool on_udp_socket_connection(Socket sock, IOCondition condition) {
+        private void on_udp_socket_connection(Socket sock, IOCondition condition) {
             SocketAddress sender;
             string data;
             try {
                 uint8[] buffer = new uint8[1 << 16]; // Maximum UDP length - we don't loose anything
-                ssize_t read = sock.receive_from(out sender, buffer);
+                sock.receive_from(out sender, buffer);
                 data = (string)buffer;
             } catch (Error e) {
-                error("Could not receive datagram from udp connection: " + e.message);
+                warning("Could not receive datagram from udp connection: " + e.message);
+                return;
             }
             InetSocketAddress inet_sender = sender as InetSocketAddress;
             
 //            debug("UDP will be discarded. Received data from %s:%u : %s", inet_sender.address.to_string(), inet_sender.port, data);
             try {
-                    new_udp_socket_connection.begin(inet_sender, data);
+                new_udp_socket_connection.begin(inet_sender, data);
             } catch (Error e) {
                 // pass
             }
-            return true; // keep looking for UDP connections
         }
     
-        private async void new_udp_socket_connection(InetSocketAddress sender, string data) {
+        private async void new_udp_socket_connection(InetSocketAddress sender, string data) throws Error {
             var pkt = NetworkProtocol.Packet.unserialize(data);
             
             if (pkt == null) {
@@ -440,11 +414,18 @@ namespace Gconnect.LanConnection {
             try {
                 conn = yield client.connect_async(new InetSocketAddress( sender.address, remote_tcp_port), client_cancellable);
             } catch (Error e) {
-                error("Error with early tcp client connection: %s\n", e.message);
+                warning("Error with early tcp client connection: %s\n", e.message);
+                return;
             }
 
             // Configure TCP socket
-            configure_socket(conn.get_socket());
+            try {
+                configure_socket(conn.get_socket());
+            } catch (Error e) {
+                warning("Error configuring the socket: %s", e.message);
+                return;
+            }
+
             
             // If network is on ssl, do not believe when they are connected, believe when handshake is completed
             bool res = false;
@@ -459,7 +440,7 @@ namespace Gconnect.LanConnection {
                     res = conn.output_stream.flush();
                 }
             } catch (IOError e) {
-                error("Error with tcp client connection: %s\n", e.message);
+                warning("Error with tcp client connection: %s\n", e.message);
             }
 
             // Configure the successful connection or fallback to udp.
@@ -474,13 +455,17 @@ namespace Gconnect.LanConnection {
 
         }    
         
-        [Callback]
-        private bool on_server_connection(SocketConnection conn) {
+        private void on_server_connection(SocketConnection conn) {
             // Configure TCP socket
-            configure_socket(conn.get_socket());
+            try {
+                configure_socket(conn.get_socket());
+            } catch (Error e) {
+                warning("Error configuring the socket: %s", e.message);
+                return;
+            }
+  
             // Process the request asynchronously
             new_server_connection.begin(conn);
-            return true;
         }
 
         private async void new_server_connection(SocketConnection conn) {
@@ -488,10 +473,11 @@ namespace Gconnect.LanConnection {
             string req;
             try {
                 var dis = new DataInputStream (conn.input_stream);
-                req = yield dis.read_line_async(Priority.HIGH_IDLE);
+                req = yield dis.read_line_async(Priority.DEFAULT_IDLE);
                 debug("LanLinkProvider server received reply: %s", req);
             } catch (Error e) {
-                error("Error with server connection: %s\n", e.message);
+                warning("Error with server connection: %s\n", e.message);
+                return;
             }   
             var pkt = NetworkProtocol.Packet.unserialize(req);
             if (pkt==null) {
@@ -501,10 +487,7 @@ namespace Gconnect.LanConnection {
                 return;
             }
 
-            string dev_id = pkt.get_device_id();
- 
             yield connected(conn, pkt, ConnectionStarted.REMOTELY);
- 
         }
        
         [Callback]
@@ -516,6 +499,23 @@ namespace Gconnect.LanConnection {
                 }
                 links.unset(id);
             }
+        }
+
+        private void stop_udp_watch() {
+            if (udp_source_id > 0) {
+                Source.remove(udp_source_id);
+                udp_source_id = 0;
+            }
+        }
+
+        private void start_udp_watch() {
+            stop_udp_watch();
+            SocketSource source = udp_socket.create_source(IOCondition.IN);
+            source.set_callback( (src, cond) => {
+                this.on_udp_socket_connection(src, cond);
+                return true; // keep looking for UDP connections
+            });
+            udp_source_id = source.attach(MainContext.default ());
         }
         
 //        [Callback]
@@ -545,7 +545,7 @@ namespace Gconnect.LanConnection {
         private async void broadcast_to_address(string sent, SocketAddress addr) {
             try {
                 udp_socket.send_to(addr, sent.data);
-                debug("Broadcast to %s", addr.to_string());
+                debug("Broadcast to %s: %s", addr.to_string(), sent);
             } catch (Error e) {
                 warning("Error with udp broadcast: %s\n", e.message);
             }
@@ -565,22 +565,20 @@ namespace Gconnect.LanConnection {
             return pairing_handlers[link.device_id];
         }
 
-        private void add_link(string device_id, SocketConnection sc, 
+        private void add_link(string device_id, Socket sock, IOStream stream, 
                                 NetworkProtocol.Packet pkt, ConnectionStarted origin) {
-            // Socket disconnection will now be handled by LanDeviceLink
-//            disconnect(socket, &QAbstractSocket::disconnected, socket, &QObject::deleteLater);
             debug("Add link to device: %s", device_id);
 
             if (links.has_key(device_id)) {
                 debug("device_link already existed, resetting it.");
-                links[device_id].reset(sc, origin);
+                links[device_id].reset(sock, stream, origin);
 //                bool is_paired = Config.Config.instance().is_paired(device_id);
 //                debug("Device pair status: %s", is_paired.to_string());
 //                links[device_id].set_pair_status(is_paired?
 //                        Connection.DeviceLink.PairStatus.PAIRED :
 //                        Connection.DeviceLink.PairStatus.NOT_PAIRED);
             } else {
-                var new_dl = new LanDeviceLink(device_id, this, sc, origin);
+                var new_dl = new LanDeviceLink(device_id, this, sock, stream, origin);
                 assert(new_dl != null);
                 debug("New device_link created");
                 new_dl.destroyed.connect(device_link_destroyed);

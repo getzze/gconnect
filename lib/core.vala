@@ -86,7 +86,7 @@ namespace Gconnect.Core {
         }
 
         public virtual void report_error(string title, string description) {
-            error("A core error was reported: %s -> %s", title, description);
+            warning("A core error was reported: %s -> %s", title, description);
         }
 
         

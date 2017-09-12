@@ -142,7 +142,6 @@ namespace Gconnect.NetworkProtocol {
                 throw new PacketError.MALFORMED("Failed to parse message: \'%s\', error: %s".printf(
                         data, e.message));
             }
-            return null;
         }
         
         public Packet? decrypt() throws PacketError {

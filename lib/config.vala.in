@@ -66,6 +66,27 @@ namespace Gconnect.Config {
         public bool is_paired(string id) {
             var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
             return paired.contains(id);
+        } 
+              
+        public bool has_certificate(string id) {
+            if (is_paired(id)) {
+                var dev = devices_settings[id];
+                string? cert = dev.get_string("encryption-info");
+                if (cert != null) {
+                    return true;
+                }
+            }
+            return false;
+        }       
+
+        public bool set_certificate_for_device(string id, string cert) {
+            if (is_paired(id)) {
+                var dev = devices_settings[id];
+                dev.set_string("encryption-info", cert);
+                dev.apply();
+                return true;
+            }
+            return false;
         }       
 
         public string[] get_auto_pair_devices() {
@@ -130,10 +151,7 @@ namespace Gconnect.Config {
             string id = parse_dbus_path(raw_id);
 
             DeviceManager.DeviceInfo dev_info = {};
-            // TODO: add cache
-            var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
-            bool res = paired.contains(id);
-            if (res) {
+            if (is_paired(id)) {
                 var dev = devices_settings[id];
                 dev_info.name = dev.get_string("name");
                 dev_info.category = dev.get_string("type");
@@ -143,7 +161,7 @@ namespace Gconnect.Config {
                 dev_info.encryption = dev.get_string("encryption-info");
             } else {
                 throw new IOError.FAILED("Could not retrieve device id %s from the paired devices list: %s",
-                        id, string.joinv(";", paired.to_array()));
+                        id, string.joinv(";", devices_settings.keys.to_array()));
             }
             
             return dev_info;
