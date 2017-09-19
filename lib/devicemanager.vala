@@ -280,11 +280,10 @@ namespace Gconnect.DeviceManager {
         [DBus (visible = false)]
         public virtual bool send_packet(NetworkProtocol.Packet pkt)
                 requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_PAIR)
-//                requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY)
+                requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY)
                 requires (is_paired())
         {
             if (pkt.packet_type in info.incoming) {
-                //Maybe we could block here any packet that is not an identity or a pairing packet to prevent sending non encrypted data
                 foreach (var dl in device_links) {
                     if (dl.send_packet(pkt)) { return true;}
                 }
@@ -406,34 +405,58 @@ namespace Gconnect.DeviceManager {
         [Callback]
         public void accept_pairing() {
             debug("Pairing was accepted by user");
-            if (pair_requests.is_empty) {
+            bool res = false;
+            foreach (var dl in device_links) {
+                res = res || dl.user_accepts_pair();
+            }
+            if (!res) {
                 warning("No pair requests to accept!");
             }
-            //copying because the pairing handler will be removed upon accept
-            var copy = new Gee.HashSet<Connection.PairingHandler>();
-            copy.add_all(pair_requests);
-            foreach (var ph in copy) {
-                ph.accept_pairing();
-            }
+            
+//            debug("Pairing was accepted by user");
+//            if (pair_requests.is_empty) {
+//                warning("No pair requests to accept!");
+//            }
+//            //copying because the pairing handler will be removed upon accept
+//            var copy = new Gee.HashSet<Connection.PairingHandler>();
+//            copy.add_all(pair_requests);
+//            foreach (var ph in copy) {
+//                ph.accept_pairing();
+//            }
         }
 
         [Callback]
         public void reject_pairing() {
             debug("Pairing was rejected by user");
-            if (pair_requests.is_empty) {
-                warning("No pair requests to accept!");
+            bool res = false;
+            foreach (var dl in device_links) {
+                res = res || dl.user_rejects_pair();
             }
-            //copying because the pairing handler will be removed upon accept
-            var copy = new Gee.HashSet<Connection.PairingHandler>();
-            copy.add_all(pair_requests);
-            foreach (var ph in copy) {
-                ph.reject_pairing();
+            if (!res) {
+                warning("No pair requests to reject!");
             }
+
+//            debug("Pairing was rejected by user");
+//            if (pair_requests.is_empty) {
+//                warning("No pair requests to accept!");
+//            }
+//            //copying because the pairing handler will be removed upon accept
+//            var copy = new Gee.HashSet<Connection.PairingHandler>();
+//            copy.add_all(pair_requests);
+//            foreach (var ph in copy) {
+//                ph.reject_pairing();
+//            }
         }
         
         [Callback]
         public bool has_pairing_requests() {
-            return !pair_requests.is_empty;
+            foreach (var dl in device_links) {
+                if (dl.has_pairing_handler()) {
+                    return true;
+                }
+            }
+            return false;
+//            return !pair_requests.is_empty;
         }
 
         public string icon_name() {

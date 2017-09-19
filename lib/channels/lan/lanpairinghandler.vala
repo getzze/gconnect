@@ -44,7 +44,10 @@ namespace Gconnect.LanConnection {
 
         // Public methods
         public override void packet_received(NetworkProtocol.Packet pkt) {
-            bool wants_pair = pkt.get_bool("pair");
+            bool? wants_pair = pkt.get_pair_request();
+            if (wants_pair == null) {
+                return;
+            }
             if (wants_pair) {
                 if (is_pair_requested())  { //We started pairing
                     debug("Pair answer");

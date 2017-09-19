@@ -36,7 +36,7 @@ namespace Gconnect.LoopbackConnection {
         public override string name { get; protected set; default="LoopbackLinkProvider"; }
         public override int priority { get; protected set; default=PRIORITY_LOW; }
         
-        public override void on_start() { on_network_change(); }
+        public override void on_start() throws Error { on_network_change(); }
 
         public override void on_stop() {
             if (_device_link!=null) {

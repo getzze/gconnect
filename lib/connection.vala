@@ -35,11 +35,8 @@ namespace Gconnect.Connection {
         
         public signal void on_connection_received(NetworkProtocol.Packet ip, DeviceLink dl);
 
-        [Callback]
-        public abstract void on_start();
-        [Callback]
+        public abstract void on_start() throws Error ;
         public abstract void on_stop();
-        [Callback]
         public abstract void on_network_change();
     }
     
@@ -49,7 +46,7 @@ namespace Gconnect.Connection {
         protected PairStatus _pair_status;
         protected GLib.Cancellable cancel_link;
 
-//        protected PairingHandler? pairing_handler = null;
+        protected PairingHandler? pairing_handler = null;
 
         public enum PairStatus { NOT_PAIRED, PAIRED }
 
@@ -77,6 +74,7 @@ namespace Gconnect.Connection {
         }
         
         ~DeviceLink() {
+            this.pairing_handler = null;
             destroyed(this.device_id);
         }
 
@@ -100,24 +98,27 @@ namespace Gconnect.Connection {
         //user actions
         public abstract void user_requests_pair();
         public abstract void user_requests_unpair();
+
+        public virtual bool has_pairing_handler() {
+            return (this.pairing_handler != null)?true:false;
+        }
         
-//        public virtual void user_requests_pair() {
-//            create_pairing_handler();
-//            this.pairing_handler.request_pairing();
-//        }
+        public virtual bool user_accepts_pair() {
+            if (this.has_pairing_handler()) {
+                this.pairing_handler.accept_pairing();
+                return true;
+            }
+            return false;
+        }
+
+        public virtual bool user_rejects_pair() {
+            if (this.has_pairing_handler()) {
+                this.pairing_handler.reject_pairing();
+                return true;
+            }
+            return false;
+        }
         
-//        public virtual void user_requests_unpair() {
-//            create_pairing_handler();
-//            this.pairing_handler.unpair();
-//        }
-
-//        protected virtual void incoming_pair_packet(NetworkProtocol.Packet pkt) {
-//            create_pairing_handler();
-//            this.pairing_handler.packet_received(pkt);
-//        }
-
-//        protected abstract void create_pairing_handler();
-
         //The daemon will periodically destroy unpaired links if this returns false
         public virtual bool link_should_be_kept_alive() { return false;}
     }

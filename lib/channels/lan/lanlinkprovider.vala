@@ -29,7 +29,7 @@ namespace Gconnect.LanConnection {
     
     public enum ConnectionStarted { LOCALLY, REMOTELY }
 
-    private string string_to_locale(string raw_string, ssize_t len = -1) {
+    private string string_to_locale(string raw_string, ssize_t len = -1) throws ConvertError {
         string data = raw_string;
         unowned string locale;
         bool need_convert = GLib.get_charset (out locale);
@@ -39,7 +39,7 @@ namespace Gconnect.LanConnection {
         return data;
     }
 
-    private string string_from_locale(string text) {
+    private string string_from_locale(string text) throws ConvertError {
         unowned string locale;
         string data = text;
         bool need_convert = GLib.get_charset (out locale);
@@ -55,7 +55,6 @@ namespace Gconnect.LanConnection {
         public const uint16 MIN_TCP_PORT = 1716;
         public const uint16 MAX_TCP_PORT = 1764;
         private uint16 tcp_port;
-        private bool SSL = false;
 
         // Private attributes
         private SocketService server;
@@ -68,18 +67,18 @@ namespace Gconnect.LanConnection {
         private uint udp_source_id = 0;
         
         private HashMap<string, LanConnection.LanDeviceLink> links;
-        private HashMap<string, LanConnection.LanPairingHandler> pairing_handlers;
+//        private HashMap<string, LanConnection.LanPairingHandler> pairing_handlers;
 
         private bool test_mode;
         private uint combine_broadcasts_timer = 0;
 
 
-        public LanLinkProvider(bool mode) {
+        public LanLinkProvider(bool mode) throws Error {
             this.tcp_port = 0;
             this.test_mode = mode;
             
             links = new HashMap<string, LanConnection.LanDeviceLink>();
-            pairing_handlers = new HashMap<string, LanConnection.LanPairingHandler>();
+//            pairing_handlers = new HashMap<string, LanConnection.LanPairingHandler>();
 
             InetAddress client_address;
             InetAddress bc_address;
@@ -133,20 +132,20 @@ namespace Gconnect.LanConnection {
         public override string name { get; protected set; default="LanLinkProvider"; }
         public override int priority { get; protected set; default=PRIORITY_HIGH; }
         
-        public void user_requests_pair(string device_id) {
-            var ph = create_pairing_handler(links[device_id]);
-            ph.request_pairing();
-        }
+//        public void user_requests_pair(string device_id) {
+//            var ph = create_pairing_handler(links[device_id]);
+//            ph.request_pairing();
+//        }
         
-        public void user_requests_unpair(string device_id) {
-            var ph = create_pairing_handler(links[device_id]);
-            ph.unpair();
-        }
+//        public void user_requests_unpair(string device_id) {
+//            var ph = create_pairing_handler(links[device_id]);
+//            ph.unpair();
+//        }
         
-        public void incoming_pair_packet(Connection.DeviceLink dl, NetworkProtocol.Packet pkt) {
-            var ph = create_pairing_handler(dl);
-            ph.packet_received(pkt);
-        }
+//        public void incoming_pair_packet(Connection.DeviceLink dl, NetworkProtocol.Packet pkt) {
+//            var ph = create_pairing_handler(dl);
+//            ph.packet_received(pkt);
+//        }
 
         public static void configure_tls_connection(TlsConnection conn, string device_id) {
             var config = Config.Config.instance();
@@ -218,17 +217,14 @@ namespace Gconnect.LanConnection {
         }
 
         // Public slots
-        [Callback]
-        public override void on_start() {
+        public override void on_start() throws Error {
+            info("LanLinkProvider on start ...");
+            
             // Bind udp socket
-            try {
-                bool success = udp_socket.bind(this.udp_address, true);  // allow_reuse=true
-                assert(success);
-                start_udp_watch();
-            } catch (Error e) {
-                error("Could not start udp socket: " + e.message);
-            }            
-            debug("LanLinkProvider on start ...");
+            udp_socket.bind(this.udp_address, true);  // allow_reuse=true
+            start_udp_watch();
+
+            debug("Bind UDP socket to %s", this.udp_address.to_string());
             
             // Start server listening
             this.tcp_port = MIN_TCP_PORT;
@@ -246,18 +242,18 @@ namespace Gconnect.LanConnection {
             on_network_change();
         }
 
-        [Callback]
         public override void on_stop() {
-            debug("... LanLinkProvider on stop");
+            info("... LanLinkProvider on stop");
             stop_udp_watch();
-            udp_socket.close();
+            try {
+                udp_socket.close();
+            } catch (Error e) {}
             
             server.stop();
             server_cancellable.cancel();
             client_cancellable.cancel();
         }
 
-        [Callback]
         public override void on_network_change() {
             if (combine_broadcasts_timer>0) {
                 debug("Preventing duplicate broadcasts");
@@ -328,7 +324,6 @@ namespace Gconnect.LanConnection {
             }
         }
 
-        [Callback]
         public bool accept_certificate_error(TlsConnection sender, TlsCertificate cert, TlsCertificateFlags errors) {
 //            debug("Accept certificate: %s", cert.certificate_pem);
             debug("Accept peer certificate");
@@ -362,7 +357,6 @@ namespace Gconnect.LanConnection {
         }
         
         // Private slots
-        [Callback]
         private void on_udp_socket_connection(Socket sock, IOCondition condition) {
             SocketAddress sender;
             string data;
@@ -385,13 +379,15 @@ namespace Gconnect.LanConnection {
         }
     
         private async void new_udp_socket_connection(InetSocketAddress sender, string data) throws Error {
-            var pkt = NetworkProtocol.Packet.unserialize(data);
-            
-            if (pkt == null) {
-                warning("The packet is malformed");
+            NetworkProtocol.Packet pkt = null;
+            try {
+                pkt = NetworkProtocol.Packet.unserialize(data);
+            } catch (NetworkProtocol.PacketError e) {
+                warning("Error unserializing json packet %s", data);
                 return;
-            } else if (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY) {
-                warning("LanLinkProvider/newConnection: Expected identity, received %", pkt.packet_type);
+            }
+            if (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY) {
+                warning("LanLinkProvider udp socket: Expected identity, received %", pkt.packet_type);
                 return;
             }
             
@@ -493,11 +489,16 @@ namespace Gconnect.LanConnection {
                 warning("Error with server connection: %s\n", e.message);
                 return;
             }   
-            var pkt = NetworkProtocol.Packet.unserialize(req);
-            if (pkt==null) {
+            
+            NetworkProtocol.Packet pkt = null;
+            try {
+                pkt = NetworkProtocol.Packet.unserialize(req);
+            } catch (NetworkProtocol.PacketError e) {
+                warning("Error unserializing json packet %s", req);
                 return;
-            } else if (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY) {
-                warning("LanLinkProvider/newConnection: Expected identity, received %", pkt.packet_type);
+            }
+            if (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY) {
+                warning("LanLinkProvider server response: Expected identity, received %s", pkt.packet_type);
                 return;
             }
 
@@ -506,13 +507,14 @@ namespace Gconnect.LanConnection {
        
         [Callback]
         private void device_link_destroyed(string id) {
-            if (links.has_key(id)) {
-                // PairingHandler depends on DeviceLink, so remove first
-                if (pairing_handlers.has_key(id)) {
-                    pairing_handlers.unset(id);
-                }
-                links.unset(id);
-            }
+            links.unset(id);
+//            if (links.has_key(id)) {
+//                // PairingHandler depends on DeviceLink, so remove first
+//                if (pairing_handlers.has_key(id)) {
+//                    pairing_handlers.unset(id);
+//                }
+//                links.unset(id);
+//            }
         }
 
         private void stop_udp_watch() {
@@ -532,10 +534,6 @@ namespace Gconnect.LanConnection {
             udp_source_id = source.attach(MainContext.default ());
         }
         
-//        [Callback]
-//        private void ssl_errors(const QList<QSslError>& errors);
-        
-        [Callback]
         private bool broadcast_to_network() {
             if (!server.is_active()) {
                 //Server not started
@@ -569,15 +567,15 @@ namespace Gconnect.LanConnection {
         // Private methods
 //        private void on_network_configuration_changed(const QNetworkConfiguration &config);
         
-        private LanPairingHandler create_pairing_handler(Connection.DeviceLink link) {
-            if (!pairing_handlers.has_key(link.device_id)) {
-                var ph = new LanPairingHandler(link);
-                debug("Creating pairing handler for %s", link.device_id);
-                ph.pairing_error.connect((s,m) => {link.pairing_error(m); });
-                pairing_handlers[link.device_id] = (owned) ph;
-            }
-            return pairing_handlers[link.device_id];
-        }
+//        private LanPairingHandler create_pairing_handler(Connection.DeviceLink link) {
+//            if (!pairing_handlers.has_key(link.device_id)) {
+//                var ph = new LanPairingHandler(link);
+//                debug("Creating pairing handler for %s", link.device_id);
+//                ph.pairing_error.connect((s,m) => {link.pairing_error(m); });
+//                pairing_handlers[link.device_id] = (owned) ph;
+//            }
+//            return pairing_handlers[link.device_id];
+//        }
 
         private void add_link(string device_id, Socket sock, IOStream stream, 
                                 NetworkProtocol.Packet pkt, ConnectionStarted origin) {
@@ -596,11 +594,11 @@ namespace Gconnect.LanConnection {
                 assert(new_dl != null);
                 debug("New device_link created");
                 new_dl.destroyed.connect(device_link_destroyed);
-                if (pairing_handlers.has_key(device_id)) {
-                    //We shouldn't have a pairinghandler if we didn't have a link.
-                    //Crash if debug, recover if release (by setting the new devicelink to the old pairinghandler)
-                    pairing_handlers[device_id].device_link = new_dl;
-                }
+//                if (pairing_handlers.has_key(device_id)) {
+//                    //We shouldn't have a pairinghandler if we didn't have a link.
+//                    //Crash if debug, recover if release (by setting the new devicelink to the old pairinghandler)
+//                    pairing_handlers[device_id].device_link = new_dl;
+//                }
                 links[device_id] = new_dl;
                 assert(links[device_id] != null);
                 on_connection_received(pkt, links[device_id]);

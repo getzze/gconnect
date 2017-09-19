@@ -109,7 +109,7 @@ namespace Gconnect.NetworkProtocol {
             }
         }
 
-        public static Packet? unserialize(string data) throws PacketError {
+        public static Packet unserialize(string data) throws PacketError {
             Json.Parser jp = new Json.Parser();
             try {
                 if (data == null) {
@@ -223,6 +223,14 @@ namespace Gconnect.NetworkProtocol {
             }
             string id = this.get_string("deviceId");
             return id;
+        }
+
+        public bool? get_pair_request() {
+            if (this.packet_type != PACKET_TYPE_PAIR) {
+                warning("The received packet is not a pair packet but a %s", this.packet_type);
+                return null;
+            }
+            return this.get_bool("pair");
         }
 
         public string? parse_device_info(ref DeviceManager.DeviceInfo dev_info) {

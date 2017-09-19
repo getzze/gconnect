@@ -38,8 +38,6 @@ namespace Gconnect.LanConnection {
         public bool TLS { get; set; default = false; }
         public string peer_cert;
 
-        protected LanPairingHandler? pairing_handler = null;
-        
         public override string name { get; protected set; default="LanLink";}
 
         public LanDeviceLink(string device_id, Connection.LinkProvider parent, Socket sock, 
@@ -54,6 +52,8 @@ namespace Gconnect.LanConnection {
             reset(sock, stream, origin);
         }
             
+        public override bool link_should_be_kept_alive() { return true;}
+
         private void clean () {
             cancel_link.cancel();
             if (this.stream != null) {
@@ -147,6 +147,42 @@ namespace Gconnect.LanConnection {
             }
         }
 
+//        public UploadJob send_payload(NetworkProtocol.Packet input) {
+//            UploadJob job = new UploadJob(input.payload, device_id);
+//            job.start();
+//            return job;
+//        }
+
+        public override void user_requests_pair() {
+//            if (TLS && tls_conn.get_peer_certificate() == null) {
+            if (TLS && this.peer_cert == null) {
+                pairing_error("This device cannot be asked to pair because it is running an old version of KDE Connect.");
+            } else {
+//                ((LanLinkProvider)this.provider).user_requests_pair(device_id);
+                create_pairing_handler();
+                this.pairing_handler.request_pairing();
+            }
+        }
+        
+        public override void user_requests_unpair() {
+//            ((LanLinkProvider)this.provider).user_requests_unpair(device_id);
+            create_pairing_handler();
+            this.pairing_handler.unpair();
+        }
+        
+        private void incoming_pair_packet(NetworkProtocol.Packet pkt) {
+            create_pairing_handler();
+            this.pairing_handler.packet_received(pkt);
+        }
+        
+        private void create_pairing_handler() {
+            if (!this.has_pairing_handler()) {
+                this.pairing_handler = new LanPairingHandler(this);
+                debug("Creating pairing handler for %s", this.device_id);
+                this.pairing_handler.pairing_error.connect((s,m) => {this.pairing_error(m); });
+            }
+        }
+
         private async void send_async(OutputStream output, string sent) throws Error {
             size_t len;
             yield output.write_all_async(sent.data, Priority.DEFAULT_IDLE, cancel_link, out len);
@@ -173,27 +209,6 @@ namespace Gconnect.LanConnection {
             return res;
         }
         
-//        public UploadJob send_payload(NetworkProtocol.Packet input) {
-//            UploadJob job = new UploadJob(input.payload, device_id);
-//            job.start();
-//            return job;
-//        }
-
-        public override void user_requests_pair() {
-//            if (TLS && tls_conn.get_peer_certificate() == null) {
-            if (TLS && this.peer_cert == null) {
-                pairing_error("This device cannot be asked to pair because it is running an old version of KDE Connect.");
-            } else {
-                ((LanLinkProvider)this.provider).user_requests_pair(device_id);
-            }
-        }
-        
-        public override void user_requests_unpair() {
-            ((LanLinkProvider)this.provider).user_requests_unpair(device_id);
-        }
-
-        public override bool link_should_be_kept_alive() { return true;}
-
         private async void monitor() {
             cancel_link.reset();
 
@@ -225,7 +240,13 @@ namespace Gconnect.LanConnection {
                 return;
             }
             debug("Received: %s", data);
-            var raw_pkt = NetworkProtocol.Packet.unserialize(data);
+            NetworkProtocol.Packet raw_pkt = null;
+            try {
+                raw_pkt = NetworkProtocol.Packet.unserialize(data);
+            } catch (NetworkProtocol.PacketError e) {
+                warning("Error unserializing json packet %s", data);
+                return;
+            }
             packet_received(raw_pkt);
         }
         
@@ -243,7 +264,8 @@ namespace Gconnect.LanConnection {
         private void packet_received(NetworkProtocol.Packet raw_pkt) {
             if (raw_pkt.packet_type == NetworkProtocol.PACKET_TYPE_PAIR) {
                 //TODO: Handle pair/unpair requests and forward them (to the pairing handler?)
-                ((LanLinkProvider)this.provider).incoming_pair_packet(this, raw_pkt);
+//                ((LanLinkProvider)this.provider).incoming_pair_packet(this, raw_pkt);
+                this.incoming_pair_packet(raw_pkt);
                 return;
             }
                 
