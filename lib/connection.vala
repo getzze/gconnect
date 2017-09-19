@@ -47,9 +47,10 @@ namespace Gconnect.Connection {
     public abstract class DeviceLink : GLib.Object {
         protected weak LinkProvider _link_provider;
         protected PairStatus _pair_status;
+        protected GLib.Cancellable cancel_link;
 
-//         protected Crypt.PrivateKey private_key;
-        
+//        protected PairingHandler? pairing_handler = null;
+
         public enum PairStatus { NOT_PAIRED, PAIRED }
 
         public weak LinkProvider provider {
@@ -69,18 +70,14 @@ namespace Gconnect.Connection {
         public DeviceLink(string id, LinkProvider parent)
                 requires (id != "")
         {
-//             private_key = Config.Config.instance().crypt.private_key;
             this.device_id = id;
             this._link_provider = parent;
             this._pair_status = PairStatus.NOT_PAIRED;
+            this.cancel_link = new GLib.Cancellable();
         }
         
         ~DeviceLink() {
             destroyed(this.device_id);
-        }
-
-        protected virtual void hidden_pair_status_setter(PairStatus st) {
-            set_and_announce_pair_status(st);
         }
 
         public PairStatus get_pair_status() {
@@ -103,6 +100,23 @@ namespace Gconnect.Connection {
         //user actions
         public abstract void user_requests_pair();
         public abstract void user_requests_unpair();
+        
+//        public virtual void user_requests_pair() {
+//            create_pairing_handler();
+//            this.pairing_handler.request_pairing();
+//        }
+        
+//        public virtual void user_requests_unpair() {
+//            create_pairing_handler();
+//            this.pairing_handler.unpair();
+//        }
+
+//        protected virtual void incoming_pair_packet(NetworkProtocol.Packet pkt) {
+//            create_pairing_handler();
+//            this.pairing_handler.packet_received(pkt);
+//        }
+
+//        protected abstract void create_pairing_handler();
 
         //The daemon will periodically destroy unpaired links if this returns false
         public virtual bool link_should_be_kept_alive() { return false;}

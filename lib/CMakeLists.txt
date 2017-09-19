@@ -47,6 +47,7 @@ set(GCONNECT_VALA_PACKAGES
     libpeas-1.0
 	json-glib-1.0
 	gee-0.8
+	gnutls
 	#libnotify
 	#gdk-3.0
     #gio-2.0

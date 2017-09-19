@@ -26,7 +26,7 @@ namespace Gconnect.NetworkProtocol {
     const string PACKET_TYPE_IDENTITY = "kdeconnect.identity";
     const string PACKET_TYPE_PAIR = "kdeconnect.pair";
     const string PACKET_TYPE_ENCRYPTED = "kdeconnect.encrypted";
-    const int PROTOCOL_VERSION = 5;
+    const int PROTOCOL_VERSION = 7;
 
     public errordomain PacketError {
         MALFORMED

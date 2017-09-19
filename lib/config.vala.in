@@ -221,6 +221,9 @@ namespace Gconnect.Config {
             string key_path = get_private_key_path();
             string cert_path = get_certificate_path();
             crypt = new Mconn.Crypt.for_paths(key_path, cert_path);
+            // TODO: use GnuTls generated certificate:
+            // certtool --generate-privkey --bits 2048 --outfile private.pem
+            // certtool --generate-self-signed --load-privkey private.pem --template template.cfg --outfile certificate.pem --hash SHA256 -q
             certificate = new TlsCertificate.from_files(get_certificate_path(), get_private_key_path());
             GLib.info("Certificate loaded from pem file.");
         }

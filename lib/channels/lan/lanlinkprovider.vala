@@ -105,9 +105,14 @@ namespace Gconnect.LanConnection {
             client.set_enable_proxy(false);
             // Used to shutdown the client
             client_cancellable = new Cancellable ();
-            if (SSL && NetworkProtocol.PROTOCOL_VERSION >= MIN_VERSION_WITH_SSL_SUPPORT) {
-                client.set_tls(true);
-                client.set_tls_validation_flags(TlsCertificateFlags.UNKNOWN_CA);
+            if (NetworkProtocol.PROTOCOL_VERSION >= MIN_VERSION_WITH_SSL_SUPPORT) {
+                // Do no set because it starts TLS session directly, we need first to exchange non-encrypted info
+                client.set_tls(false);
+//                GLib.Environment.set_variable("G_TLS_GNUTLS_PRIORITY", "NONE:+VERS-TLS1.0:+MAC-ALL:+ECDHE-ECDSA:+ECDHE-RSA:+AES-256-GCM:+AES-128-GCM:+AES-128-CBC:+ARCFOUR-128:+RSA:+SHA1:+SIGN-ALL:+COMP-NULL:+CURVE-ALL:+CTYPE-ALL", true); 
+                var tls_bkd = TlsBackend.get_default();
+                bool support_tls = tls_bkd.supports_tls();
+                debug("TLS supported: %s -> %s", support_tls.to_string(), tls_bkd.get_server_connection_type().name());
+                GnuTLS.set_log_level(11);
             }
             
             server = new SocketService();
@@ -315,7 +320,7 @@ namespace Gconnect.LanConnection {
                 bool res = yield tls_conn.handshake_async();
 
                 if (res) {
-                    debug("Socket succesfully established an SSL connection");
+                    debug("Socket succesfully established a TLS connection");
                     add_link(dev_id, conn.socket, tls_conn, id, origin);
                 } else {
                     warning("Could not realize the handshake.");
@@ -472,8 +477,17 @@ namespace Gconnect.LanConnection {
             debug("New connection to tcp server");
             string req;
             try {
-                var dis = new DataInputStream (conn.input_stream);
-                req = yield dis.read_line_async(Priority.DEFAULT_IDLE);
+                var buffer = new uint8[1];
+                var sb = new StringBuilder ();
+                buffer[0] = '\0';
+                while (buffer[0] != '\n') {
+                    yield conn.input_stream.read_async (buffer, Priority.DEFAULT_IDLE);
+                    sb.append_c ((char) buffer[0]);
+                }
+                req = (string) sb.data;
+                if (req == null) {
+                    return;
+                }
                 debug("LanLinkProvider server received reply: %s", req);
             } catch (Error e) {
                 warning("Error with server connection: %s\n", e.message);

@@ -30,45 +30,33 @@ namespace Gconnect.LanConnection {
 //        private SocketConnection conn;
         private TlsConnection tls_conn;
         private IOStream stream;
-        private DataOutputStream dos;
-        private DataInputStream dis;
+        private OutputStream dos;
+        private InputStream dis;
         private uint source_id = 0;
         private ConnectionStarted connection_source;
         private InetSocketAddress host_address;
         public bool TLS { get; set; default = false; }
         public string peer_cert;
 
-        private ArrayList<LanConnection.LanPairingHandler> pairing_handlers;
+        protected LanPairingHandler? pairing_handler = null;
         
         public override string name { get; protected set; default="LanLink";}
 
         public LanDeviceLink(string device_id, Connection.LinkProvider parent, Socket sock, 
                                 IOStream stream, ConnectionStarted origin) {
             base(device_id, parent);
+            cancel_link.cancelled.connect((s)=> {
+                if (source_id > 0) {
+                    Source.remove(source_id);
+                    source_id = 0;
+                }
+            });
             reset(sock, stream, origin);
         }
             
         private void clean () {
-            if (source_id > 0) {
-                Source.remove(source_id);
-                source_id = 0;
-            }
+            cancel_link.cancel();
             if (this.stream != null) {
-                try {
-                    if (!this.dos.is_closed()) { this.dos.close();}
-                } catch (IOError e) {
-                    warning("Error closing output stream: %s\n", e.message);
-                } finally {
-                    dos = null;
-                }
-                try {
-                    if (!this.dis.is_closed()) { this.dis.close();}
-                } catch (IOError e) {
-                    warning("Error closing input stream: %s\n", e.message);
-                } finally {
-                    dis = null;
-                }
-
                 try {
                     if (!this.stream.is_closed()) { this.stream.close();}
                 } catch (IOError e) {
@@ -92,6 +80,7 @@ namespace Gconnect.LanConnection {
             //the socket (and the reader) will be
             //destroyed as well
             this.socket = sock;
+            this.socket.set_blocking(true);
             this.stream = stream;
             
             this.tls_conn = stream as TlsConnection;
@@ -109,45 +98,36 @@ namespace Gconnect.LanConnection {
 //                this.close();
 //            }
             
-            this.dos = new DataOutputStream (this.stream.output_stream);
-            this.dis = new DataInputStream (this.stream.input_stream);
+            this.dos = this.stream.output_stream;
+            this.dis = this.stream.input_stream;
             // messages end with \n\n
 //            this.dis.set_newline_type(DataStreamNewlineType.LF);
-            // Watch for incoming messages
-            SocketSource source = this.socket.create_source(IOCondition.IN | IOCondition.ERR | IOCondition.HUP);
-            source.set_callback( (src, cond) => {
-//                debug("Condition found: %u", cond);
-                if (cond == IOCondition.IN) {
-                    this.data_received();
-//                } else {
-//                    debug("Condition found: %u", cond);
-                }
-                return GLib.Source.CONTINUE; // continue watching
-            });
-            source_id = source.attach(MainContext.default ());
             
             if (TLS) {
-                debug("DeviceLink is a TlsConnection");
+//                debug("DeviceLink is a TlsConnection");
                 this.peer_cert = tls_conn.get_peer_certificate().certificate_pem;
-                try {
-                    tls_conn.handshake();
-                } catch (Error e) {
-                    warning("Could not realize handshake with %s: %s", device_id, e.message);
-                }
+//                try {
+//                    tls_conn.handshake();
+//                } catch (Error e) {
+//                    warning("Could not realize handshake with %s: %s", device_id, e.message);
+//                }
                 
                 // If already paired
                 bool has_cert = Config.Config.instance().has_certificate(device_id);
                 set_and_announce_pair_status(has_cert? Connection.DeviceLink.PairStatus.PAIRED : Connection.DeviceLink.PairStatus.NOT_PAIRED);
             } else {
+//                debug("DeviceLink is a TcpConnection");
                 bool is_paired = Config.Config.instance().is_paired(device_id);
                 set_and_announce_pair_status(is_paired? Connection.DeviceLink.PairStatus.PAIRED : Connection.DeviceLink.PairStatus.NOT_PAIRED);
             }
+            // Watch for incoming messages
+            this.monitor();
         }
         
         public override void set_pair_status(Connection.DeviceLink.PairStatus status) {
             if (TLS) {
-                var peer_cert = tls_conn.get_peer_certificate().certificate_pem;
-//                var peer_cert = this.peer_cert;
+//                var peer_cert = tls_conn.get_peer_certificate().certificate_pem;
+                var peer_cert = this.peer_cert;
                 if (status == Connection.DeviceLink.PairStatus.PAIRED && peer_cert == null) {
                     pairing_error("This device cannot be set to paired because it is running an old version of KDE Connect.");
                     return;
@@ -167,17 +147,10 @@ namespace Gconnect.LanConnection {
             }
         }
 
-        private async void send_packet_async(NetworkProtocol.Packet input) {
-            try {
-                string sent = input.serialize() + "\n";
-//                res = dos.put_string(sent);
-                size_t len;
-                yield dos.write_all_async(sent.data, Priority.DEFAULT_IDLE, null, out len);
-                debug("Packet sent: %s", sent);
-            } catch (IOError e) {
-                warning("Error receiving packet: %s", e.message);
-                this.close();
-            }
+        private async void send_async(OutputStream output, string sent) throws Error {
+            size_t len;
+            yield output.write_all_async(sent.data, Priority.DEFAULT_IDLE, cancel_link, out len);
+            debug("Packet sent: %s", sent);
         }
         
         public override bool send_packet(NetworkProtocol.Packet input) {
@@ -185,7 +158,13 @@ namespace Gconnect.LanConnection {
 //                np.setPayloadTransferInfo(sendPayload(np)->transferInfo());
             }
 
-            send_packet_async(input);
+            try {
+                string sent = input.serialize() + "\n";
+                send_async(this.dos, sent);
+            } catch (IOError e) {
+                warning("Error receiving packet: %s", e.message);
+                this.close();
+            }
 
             //Actually we can't detect if a package is received or not. We keep TCP
             //"ESTABLISHED" connections that look legit (return true when we use them),
@@ -201,8 +180,8 @@ namespace Gconnect.LanConnection {
 //        }
 
         public override void user_requests_pair() {
-            if (TLS && tls_conn.get_peer_certificate() == null) {
-//            if (TLS && this.peer_cert == null) {
+//            if (TLS && tls_conn.get_peer_certificate() == null) {
+            if (TLS && this.peer_cert == null) {
                 pairing_error("This device cannot be asked to pair because it is running an old version of KDE Connect.");
             } else {
                 ((LanLinkProvider)this.provider).user_requests_pair(device_id);
@@ -215,10 +194,28 @@ namespace Gconnect.LanConnection {
 
         public override bool link_should_be_kept_alive() { return true;}
 
-        private async void data_received() {
+        private async void monitor() {
+            cancel_link.reset();
+
+            // Must use sync callback otherwise input_stream errors are thrown: "Stream has outstanding operation"
+            SocketSource source = this.socket.create_source(IOCondition.IN | IOCondition.ERR | IOCondition.HUP);
+            source.set_callback( (sock, cond) => {
+//                debug("Condition found: %u", cond);
+                if (sock.get_available_bytes() > 0 && cond == IOCondition.IN) {
+                    this.data_received_sync();
+                } else if (IOCondition.HUP in cond || IOCondition.ERR in cond) {
+                    this.close();
+                    return GLib.Source.REMOVE; // continue watching
+                }
+                return GLib.Source.CONTINUE; // continue watching
+            });
+            source_id = source.attach(MainContext.default ());
+        }
+
+        private void data_received_sync() {
             string data = null;
             try {
-                data = yield dis.read_line_utf8_async(Priority.DEFAULT_IDLE);
+                data = read_line(this.dis);
             } catch (IOError e) {
                 warning("Error receiving packet: %s", e.message);
                 this.close();
@@ -229,7 +226,21 @@ namespace Gconnect.LanConnection {
             }
             debug("Received: %s", data);
             var raw_pkt = NetworkProtocol.Packet.unserialize(data);
+            packet_received(raw_pkt);
+        }
+        
+        private string? read_line (InputStream input) throws Error {
+            var buffer = new uint8[1];
+            var sb = new StringBuilder ();
+            buffer[0] = '\0';
+            while (buffer[0] != '\n') {
+                input.read (buffer, cancel_link);
+                sb.append_c ((char) buffer[0]);
+            }
+            return (string) sb.data;
+        }
 
+        private void packet_received(NetworkProtocol.Packet raw_pkt) {
             if (raw_pkt.packet_type == NetworkProtocol.PACKET_TYPE_PAIR) {
                 //TODO: Handle pair/unpair requests and forward them (to the pairing handler?)
                 ((LanLinkProvider)this.provider).incoming_pair_packet(this, raw_pkt);
@@ -244,6 +255,8 @@ namespace Gconnect.LanConnection {
                     debug("Error with encrypted pakcet: %s", e.message);
                     pkt = raw_pkt;
                 }
+            } else {
+                pkt = raw_pkt;
             }
 
             debug("LanDeviceLink data received: %s", pkt.to_string());
