@@ -48,12 +48,18 @@ namespace Gconnect.Plugin {
         public string name { get { return plugin_info.get_name();} }
         
         public signal void received_packet(NetworkProtocol.Packet pkt);
+        public signal void published();
         
         public PluginProxy(Peas.PluginInfo pinfo, DeviceManager.Device dev) {
             this.device = dev;
             this.plugin_info = pinfo;
+            this.device.dbus_published.connect(()=>{ this.published(); });
         }
-
+        
+        ~PluginProxy() {
+            unpublish();
+        }
+        
         public void log (string mess) {
             info("%s : %s", this.name, mess);
         }
@@ -108,7 +114,7 @@ namespace Gconnect.Plugin {
         public void unpublish() throws Error {
             try	{
                 var conn = dbus_connection();
-                if (!conn.unregister_object(this.bus_id)) {
+                if (this.bus_id > 0 && !conn.unregister_object(this.bus_id)) {
 					debug("Failed to unregister object id %u".printf(this.bus_id));
                 } else {
                     debug("Unregister plugin %s from dbus.", this.name);
@@ -141,7 +147,7 @@ namespace Gconnect.Plugin {
         public string[] outgoing_capabilities {
             owned get {
                 var plugins_types = new Gee.HashSet<string> ();
-                foreach (Peas.PluginInfo plugin in engine.get_plugin_list()) {
+                foreach (var plugin in engine.get_plugin_list()) {
                     if (plugin.is_loaded()) {
                         plugins_types.add_all_array(plugin.get_external_data("X-Outgoing-Capabilities").split(","));
                     }
@@ -154,7 +160,7 @@ namespace Gconnect.Plugin {
         public string[] incoming_capabilities {
             owned get {
                 var plugins_types = new Gee.HashSet<string> ();
-                foreach (Peas.PluginInfo plugin in engine.get_plugin_list()) {
+                foreach (var plugin in engine.get_plugin_list()) {
                     if (plugin.is_loaded()) {
                         plugins_types.add_all_array(plugin.get_external_data("X-Incoming-Capabilities").split(","));
                     }
@@ -246,7 +252,7 @@ namespace Gconnect.Plugin {
 
         private Gee.HashSet<Peas.PluginInfo> match_plugin (string incoming, string outgoing) {
             var ret = new Gee.HashSet<Peas.PluginInfo>();
-            foreach (Peas.PluginInfo plugin in engine.get_plugin_list()) {
+            foreach (var plugin in engine.get_plugin_list()) {
                 if (plugin.is_loaded() && 
                     plugin.get_external_data("X-Incoming-Capabilities")==incoming &&
                     plugin.get_external_data("X-Outgoing-Capabilities")==outgoing) {

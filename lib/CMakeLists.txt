@@ -34,7 +34,7 @@ set(GCONNECT_VALA_SOURCES
 ## Add Lan provider
 list(APPEND VALA_COMPILER_FLAGS "--define=GCONNECT_LAN")
 list(APPEND GCONNECT_VALA_SOURCES 
-    channels/lan/lanpairinghandler.vala
+    #channels/lan/lanpairinghandler.vala
     channels/lan/lanlinkprovider.vala
     channels/lan/landevicelink.vala
 )

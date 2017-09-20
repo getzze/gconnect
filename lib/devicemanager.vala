@@ -118,6 +118,7 @@ namespace Gconnect.DeviceManager {
         public signal void paired_changed(bool paired);
         public signal void has_pairing_requests_changed(bool has_requests);
 
+        public signal void dbus_published();
         public signal void plugins_changed();
         public signal void pairing_error(string error);
         public signal void name_changed(string name);
@@ -474,6 +475,7 @@ namespace Gconnect.DeviceManager {
                 string path = this.dbus_path();
                 this.bus_id = conn.register_object(path, this);
                 debug("Register device %s to dbus: %s", this.id, path);
+                dbus_published();
 			} catch (IOError e) {
 				warning ("Could not register objects: %s", e.message);
 			}

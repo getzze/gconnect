@@ -177,7 +177,7 @@ namespace Gconnect.LanConnection {
         
         private void create_pairing_handler() {
             if (!this.has_pairing_handler()) {
-                this.pairing_handler = new LanPairingHandler(this);
+                this.pairing_handler = new Connection.PairingHandler(this);
                 debug("Creating pairing handler for %s", this.device_id);
                 this.pairing_handler.pairing_error.connect((s,m) => {this.pairing_error(m); });
             }
