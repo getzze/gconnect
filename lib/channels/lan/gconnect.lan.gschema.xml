@@ -1,0 +1,44 @@
+<schemalist>
+  <schema id="org.gconnect.providers.lan" path="/apps/gconnect/providers/lan/" gettext-domain="gconnect">
+
+    <key name="udp-port" type="q">
+      <default>1716</default>
+      <summary>UDP port for network discovery</summary>
+      <description>
+        The port number for discovering new devices.
+        Do not change except if you know what you are doing, it may be hardcoded in the remote device.
+      </description>
+    </key>
+
+    <key name="tcp-port-range" type="(qq)">
+      <default>(1716,1764)</default>
+      <summary>TCP port range for packet communication</summary>
+      <description>
+        The port range to try to start a TCP server socket for packet communication.
+        The server tries to start on the lowest port number. If it fails, the port value is increased
+        and it retries until the server starts or the upper port value is reached.
+      </description>
+    </key>
+
+    <key name="tcp-file-transfer-port-range" type="(qq)">
+      <default>(1739,1764)</default>
+      <summary>TCP port range for file transfer</summary>
+      <description>
+        The port range to try to start a TCP server socket for file transfer.
+        The server tries to start on the lowest port number. If it fails, the port value is increased
+        and it retries until the server starts or the upper port value is reached.
+      </description>
+    </key>
+
+    <key name="ip-discovery" type="as">
+      <default>[]</default>
+      <summary>Custom list of IP to try to connect to</summary>
+      <description>
+        A list of IP (ipv4) addresses to look for a remote device.
+      </description>
+    </key>
+
+  </schema>
+</schemalist>
+  
+

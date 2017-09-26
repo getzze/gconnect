@@ -1,6 +1,15 @@
 <schemalist>
   <schema id="org.gconnect" path="/apps/gconnect/" gettext-domain="gconnect">
 
+    <key name="id" type="s">
+      <default>""</default>
+      <summary>Local device unique id</summary>
+      <description>
+        Unique identifier of the local gconnect server.
+        Generated automatically, change only if you know what you are doing.
+      </description>
+    </key>
+
     <key name="name" type="s">
       <default>"gconnect"</default>
       <summary>Local device name</summary>
@@ -25,11 +34,15 @@
       </description>
     </key>
 
+    <child name="providers" schema="org.gconnect.providers"/>
     <child name="devices" schema="org.gconnect.paired-devices"/>
     <child name="plugins" schema="org.gconnect.plugins"/>
 
   </schema>
   
+  <schema id="org.gconnect.providers" path="/apps/gconnect/providers/">
+  </schema>
+
   <schema id="org.gconnect.paired-devices" path="/apps/gconnect/devices/">
 <!--
     <child name="self" schema="org.gconnect.device"/>
@@ -86,6 +99,14 @@
       <summary>Array of outgoing capabilities</summary>
       <description>
         An array of the outgoing capabilities of the device
+      </description>
+    </key>
+      
+    <key name="ip-address" type="s">
+      <default>""</default>
+      <summary>Ip address</summary>
+      <description>
+        The last ip address of the device
       </description>
     </key>
       

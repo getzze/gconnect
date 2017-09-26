@@ -14,26 +14,15 @@ namespace Gconnect.Config {
         private GLib.Settings settings;
         private GLib.Settings root_devices_settings;
         private Gee.HashMap<string, GLib.Settings> devices_settings;
-        private string _device_id;
         private string _device_category = "desktop";
-        
-        internal Mconn.Crypt crypt { get; private set; default = null; }
+     
+        internal Mconn.Crypt crypt_openssl { get; private set; default = null; }
+        internal Crypt.Crypt crypt_gnutls { get; private set; default = null; }
         public TlsCertificate certificate { get; private set; default = null; }
         
         public string device_name {get; set;}
 
-        public string device_id {
-            get {
-                if (false) {
-                    string host_name = Environment.get_host_name();
-                    string user = Environment.get_user_name();
-                    _device_id = @"gconnect:$user@$host_name";
-                    return _device_id;
-                }
-                _device_id = this.crypt.get_uuid();
-                return _device_id;
-            }
-        }       
+        public string device_id {get; private set;}
         
         public string device_category {
             get { return _device_category;}
@@ -42,12 +31,20 @@ namespace Gconnect.Config {
         private Config() {
             init_user_dirs();
 
- 			init_crypto();
-
             this.settings = new Settings("org.gconnect");
             this.settings.bind("name", this, "device_name", SettingsBindFlags.DEFAULT);
+            this.settings.bind("id", this, "device_id", SettingsBindFlags.SET);
+            if (!Guuid.is_valid(this.settings.get_string("id"))) {
+                device_id = Guuid.random();
+                info("Generate new uuid for the local server: %s", device_id);
+            } else {
+                device_id = this.settings.get_string("id");
+            }
             this.root_devices_settings = new Settings("org.gconnect.paired-devices");
             this.devices_settings = new Gee.HashMap<string, GLib.Settings>();
+
+ 			init_crypto();
+
             load_paired_devices();
         }
 
@@ -103,17 +100,25 @@ namespace Gconnect.Config {
                 paired.add(id);
             }
 
-            var dev = new Settings.with_path("org.gconnect.device", "/apps/gconnect/devices/" + id + "/");
+            string new_path = this.settings.path + "devices/";
+            var dev = new Settings.with_path("org.gconnect.device", new_path + id + "/");
             dev.set_string("id", raw_id);
             dev.set_string("name", dev_info.name);
             dev.set_string("type", dev_info.category);
             dev.set_int("protocol-version", dev_info.protocol_version);
             dev.set_strv("incoming-capabilities", dev_info.incoming);
             dev.set_strv("outgoing-capabilities", dev_info.outgoing);
-            dev.set_string("encryption-info", dev_info.encryption);
+            // Lan
+            if (dev_info.encryption != "") {
+                dev.set_string("encryption-info", dev_info.encryption);
+            }
+            if (dev_info.ip_address != "") {
+                dev.set_string("ip-address", dev_info.ip_address);
+            }
+
             devices_settings[id] = dev;
             dev.apply();
-
+            
             this.settings.set_strv("paired-devices", paired.to_array());
             this.settings.apply();
             message("New trusted device added:\n%s", dev_info.to_string());
@@ -138,6 +143,8 @@ namespace Gconnect.Config {
             dev.reset("protocol-version");
             dev.reset("incoming-capabilities");
             dev.reset("outgoing-capabilities");
+            // Lan
+            dev.reset("ip-address");
             dev.reset("encryption-info");
             dev.apply();
             devices_settings.unset(id);
@@ -158,6 +165,8 @@ namespace Gconnect.Config {
                 dev_info.protocol_version = dev.get_int("protocol-version");
                 dev_info.incoming = dev.get_strv("incoming-capabilities");
                 dev_info.outgoing = dev.get_strv("outgoing-capabilities");
+                // Lan
+                dev_info.ip_address = dev.get_string("ip-address");
                 dev_info.encryption = dev.get_string("encryption-info");
             } else {
                 throw new IOError.FAILED("Could not retrieve device id %s from the paired devices list: %s",
@@ -169,8 +178,9 @@ namespace Gconnect.Config {
         
         private void load_paired_devices() {
             var paired = new Gee.ArrayList<string>.wrap(this.get_paired_devices());
+            string new_path = this.settings.path + "devices/";
             foreach (var id in paired) {
-                var dev = new Settings.with_path("org.gconnect.device", "/apps/gconnect/devices/" + id + "/");
+                var dev = new Settings.with_path("org.gconnect.device", new_path + id + "/");
                 devices_settings[id] = dev;
             }
         }
@@ -213,14 +223,31 @@ namespace Gconnect.Config {
         
         public string get_public_key_pem() {
 //            var str = "-----BEGIN PUBLIC KEY-----\n\n-----END PUBLIC KEY-----\n";
-            var str = crypt.get_public_key_pem();
+            var str = "";
+            if (crypt_openssl != null) {
+                str = crypt_openssl.get_public_key_pem();
+            }
             return str;
+        }
+        
+        public ByteArray decrypt(Bytes chars) {
+            ByteArray ret = null;
+            if (crypt_openssl != null) {
+                ret = crypt_openssl.decrypt(chars);
+            }
+            return ret;
         }
         
         private void init_crypto() {
             string key_path = get_private_key_path();
             string cert_path = get_certificate_path();
-            crypt = new Mconn.Crypt.for_paths(key_path, cert_path);
+            // Check uuid size
+            if (device_id.length != 36) {
+                error("The UUID has not the correct size (63), certificate cannot be generated: %d", device_id.length);
+            }
+            GLib.Environment.set_variable("G_TLS_GNUTLS_PRIORITY", "NONE:+VERS-TLS1.0:+MAC-ALL:+ECDHE-ECDSA:+ECDHE-RSA:+AES-256-GCM:+AES-128-GCM:+AES-128-CBC:+ARCFOUR-128:+RSA:+SHA1:+SIGN-ALL:+COMP-NULL:+CURVE-ALL:+CTYPE-ALL", true); 
+            crypt_gnutls = new Crypt.Crypt(key_path, cert_path, device_id);
+//            crypt_openssl = new Mconn.Crypt.for_paths(key_path, cert_path);
             // TODO: use GnuTls generated certificate:
             // certtool --generate-privkey --bits 2048 --outfile private.pem
             // certtool --generate-self-signed --load-privkey private.pem --template template.cfg --outfile certificate.pem --hash SHA256 -q

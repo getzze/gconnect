@@ -151,7 +151,7 @@ namespace Gconnect.NetworkProtocol {
                 throw new PacketError.MALFORMED("Not an encrypted packet");
             }
             unowned Json.Array arr = get_array("data");
-            var crypt = Config.Config.instance().crypt;
+            var config = Config.Config.instance();
             bool failed = false;
             var msgbytes = new ByteArray();
             arr.foreach_element((a, i, node) => {
@@ -160,7 +160,7 @@ namespace Gconnect.NetworkProtocol {
                 uchar[] data = Base64.decode(node.get_string());
                 var dbytes = new Bytes.take(data);
                 try {
-                    ByteArray decrypted = crypt.decrypt(dbytes);
+                    ByteArray decrypted = config.decrypt(dbytes);
                     debug("data length: %zu", decrypted.data.length);
                     msgbytes.append(decrypted.data);
                 } catch (Error e) {
@@ -251,7 +251,6 @@ namespace Gconnect.NetworkProtocol {
                 dev_info.outgoing = this.get_strv("outgoingCapabilities");
                 dev_info.incoming = this.get_strv("incomingCapabilities");
             }
-            dev_info.encryption = "";
             return id;
         }
 

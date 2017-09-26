@@ -54,7 +54,8 @@ namespace Gconnect.LanConnection {
         public const uint16 UDP_PORT = 1716;
         public const uint16 MIN_TCP_PORT = 1716;
         public const uint16 MAX_TCP_PORT = 1764;
-        private uint16 tcp_port;
+
+        private LanLinkConfig _config;
 
         // Private attributes
         private NetworkMonitor monitor;
@@ -67,14 +68,20 @@ namespace Gconnect.LanConnection {
         private InetSocketAddress udp_address;
         private InetSocketAddress broadcast_address;
         private uint udp_source_id = 0;
+        private uint16 tcp_port;
         
         private HashMap<string, LanConnection.LanDeviceLink> links;
 
         private bool test_mode;
         private uint combine_broadcasts_timer = 0;
 
+        public override Connection.LinkConfig config {
+            get { return this._config; }
+            protected set { this._config = value as LanLinkConfig; }
+        }
 
         public LanLinkProvider(bool mode) throws Error {
+            this._config = new LanLinkConfig();
             this.tcp_port = 0;
             this.test_mode = mode;
             
@@ -91,14 +98,14 @@ namespace Gconnect.LanConnection {
 //                bc_address = new InetAddress.any(SocketFamily.IPV4);
                 bc_address = new InetAddress.from_string("255.255.255.255");
             }
-            this.udp_address = new InetSocketAddress(client_address, UDP_PORT);
-            this.broadcast_address = new InetSocketAddress(bc_address, UDP_PORT);
+            this.udp_address = new InetSocketAddress(client_address, this._config.udp_port);
+            this.broadcast_address = new InetSocketAddress(bc_address, this._config.udp_port);
 
             udp_socket = new Socket(SocketFamily.IPV4, SocketType.DATAGRAM, SocketProtocol.UDP);
             udp_send_socket = new Socket(SocketFamily.IPV4, SocketType.DATAGRAM, SocketProtocol.UDP);
             udp_send_socket.set_broadcast(true);
             udp_send_socket.set_multicast_loopback(false);
-            udp_send_socket.set_multicast_ttl(255);
+            udp_send_socket.set_multicast_ttl(1);
             
             client = new SocketClient();
             client.set_family(SocketFamily.IPV4);
@@ -108,11 +115,8 @@ namespace Gconnect.LanConnection {
             if (NetworkProtocol.PROTOCOL_VERSION >= MIN_VERSION_WITH_SSL_SUPPORT) {
                 // Do no set because it starts TLS session directly, we need first to exchange non-encrypted info
                 client.set_tls(false);
-//                GLib.Environment.set_variable("G_TLS_GNUTLS_PRIORITY", "NONE:+VERS-TLS1.0:+MAC-ALL:+ECDHE-ECDSA:+ECDHE-RSA:+AES-256-GCM:+AES-128-GCM:+AES-128-CBC:+ARCFOUR-128:+RSA:+SHA1:+SIGN-ALL:+COMP-NULL:+CURVE-ALL:+CTYPE-ALL", true); 
                 var tls_bkd = TlsBackend.get_default();
-                bool support_tls = tls_bkd.supports_tls();
-                debug("TLS supported: %s -> %s", support_tls.to_string(), tls_bkd.get_server_connection_type().name());
-                GnuTLS.set_log_level(11);
+                debug("TLS supported: %s -> %s", tls_bkd.supports_tls().to_string(), tls_bkd.get_server_connection_type().name());
             }
             
             server = new SocketService();
@@ -216,18 +220,15 @@ namespace Gconnect.LanConnection {
             // Bind udp socket
             udp_socket.bind(this.udp_address, true);  // allow_reuse=true
             udp_send_socket.bind(this.udp_address, true);  // allow_reuse=true
-//            start_udp_watch();
-
-//            udp_send_socket.bind(this.broadcast_address, true);  // allow_reuse=true
-
+            start_udp_watch();
             debug("Bind UDP socket to %s", this.udp_address.to_string());
             
             // Start server listening
-            this.tcp_port = MIN_TCP_PORT;
+            this.tcp_port = this._config.tcp_range[0];
             while (!server.add_inet_port(this.tcp_port, null)) {
                 this.tcp_port++;
-                if (this.tcp_port > MAX_TCP_PORT) { //No ports available?
-                    critical("Error opening a port in range %u-%u", MIN_TCP_PORT, MAX_TCP_PORT);
+                if (this.tcp_port > this._config.tcp_range[1]) { //No ports available?
+                    critical("Error opening a port in range %u-%u", this._config.tcp_range[0], this._config.tcp_range[1]);
                     this.tcp_port = 0;
                     return;
                 }
@@ -301,14 +302,14 @@ namespace Gconnect.LanConnection {
                 return;
             }
 
-            uint16 remote_tcp_port = UDP_PORT; // Default
+            uint16 remote_tcp_port = this._config.tcp_range[0]; // Default
             debug("Incoming identity packet: %s", pkt.to_string());
             if (pkt.has_field("tcpPort")) {
                 remote_tcp_port = (uint16)pkt.get_int("tcpPort");
             } else {
                 warning("Incoming identity packet does not specify a tcpPort, try default: %u", remote_tcp_port);
             }
-            if (remote_tcp_port < MIN_TCP_PORT || remote_tcp_port > MAX_TCP_PORT) {
+            if (remote_tcp_port < this._config.tcp_range[0] || remote_tcp_port > this._config.tcp_range[1]) {
                 warning("Asking for TCP connection outside of allowed range. Not default behavior, aborting: port %u", remote_tcp_port);
             }
 
@@ -452,11 +453,13 @@ namespace Gconnect.LanConnection {
             debug("Broadcasting identity packet");
             string sent = pkt.serialize() + "\n";
 
-            broadcast_to_address(sent, udp_address);
-//            broadcast_to_address(sent, new InetSocketAddress.from_string("192.168.1.0", UDP_PORT));
-//            broadcast_to_address(sent, new InetSocketAddress.from_string("192.168.1.1", UDP_PORT));
-//            broadcast_to_address(sent, new InetSocketAddress.from_string("192.168.1.2", UDP_PORT));
-//            broadcast_to_address(sent, new InetSocketAddress.from_string("192.168.1.255", UDP_PORT));
+            var addresses = new HashSet<string>();
+            addresses.add(udp_address.address.to_string());
+            addresses.add_all_array(this._config.ip_discovery);
+            addresses.add_all_array(this._config.get_known_ip_addresses());
+            foreach (var addr in addresses) {
+                broadcast_to_address(sent, new InetSocketAddress.from_string(addr, this._config.udp_port));
+            }
 
             // stop timer
             combine_broadcasts_timer = 0;
@@ -466,7 +469,6 @@ namespace Gconnect.LanConnection {
         private async void broadcast_to_address(string sent, SocketAddress addr) {
             try {
                 size_t res = udp_send_socket.send_to(addr, sent.data);
-//                debug("Broadcast to %s (%s): %s (%.0f)", addr.to_string(), udp_send_socket.get_remote_address().to_string(), sent, res);
                 debug("Broadcast to %s: %s (%.0f)", addr.to_string(), sent, res);
             } catch (Error e) {
                 warning("Error with udp broadcast: %s\n", e.message);
@@ -584,8 +586,8 @@ namespace Gconnect.LanConnection {
                 new_dl.destroyed.connect(device_link_destroyed);
                 links[device_id] = new_dl;
                 assert(links[device_id] != null);
-                on_connection_received(pkt, links[device_id]);
             }
+            on_connection_received(pkt, links[device_id]);
         }
     }
 } 

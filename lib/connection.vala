@@ -25,11 +25,18 @@ using Gee;
 
 namespace Gconnect.Connection {
 
+//    public class LinkInfo {}  // No need for GLib.Object methods, only struct with inheritance
+    public class LinkConfig : GLib.Object {
+        public virtual void add_device(DeviceManager.Device dev) {}
+        public virtual void remove_device(DeviceManager.Device dev) {}
+    }
+
     public abstract class LinkProvider : GLib.Object {
         public const int PRIORITY_LOW = 0;      //eg: 3g internet
         public const int PRIORITY_MEDIUM = 50;  //eg: internet
         public const int PRIORITY_HIGH = 100;   //eg: lan
 
+        public virtual LinkConfig config { get; protected set; default=new LinkConfig(); }
         public abstract string name {get; protected set; }
         public abstract int priority {get; protected set; }
         
@@ -111,6 +118,13 @@ namespace Gconnect.Connection {
             return false;
         }
 
+        public virtual void parse_device_info(ref DeviceManager.DeviceInfo dev) {}
+        
+//        public virtual DeviceLinkInfo get_info() {
+//            var ret = new DeviceLinkInfo();
+//            return ret;
+//        }
+        
         public virtual bool user_rejects_pair() {
             if (this.has_pairing_handler()) {
                 this.pairing_handler.reject_pairing();

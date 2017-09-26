@@ -27,17 +27,6 @@ namespace Gconnect.Core {
     
     Core __instance = null;
 
-    struct CorePrivateDict {
-        // Connections
-        public HashSet<Connection.LinkProvider> link_providers;
-        
-        // Devices
-        public HashMap<string, DeviceManager.Device> devices;
-
-        // Discovery modes
-        public HashSet<string> discovery_mode_acquisitions;
-    }
-
     [Flags]
     public enum TestMode {
         LOOPBACK,
@@ -51,7 +40,14 @@ namespace Gconnect.Core {
 
     [DBus(name = "org.gconnect.core")]
     public class Core: GLib.Object {
-        private CorePrivateDict _dict;
+        // Connections
+        private HashSet<Connection.LinkProvider> link_providers;
+        // Devices
+        private HashMap<string, DeviceManager.Device> devices;
+        // Discovery modes
+        private HashSet<string> discovery_mode_acquisitions;
+        // Configuration
+        private Config.Config config;
 
         private unowned DBusConnection conn;
         private uint bus_name_id = 0;
@@ -66,7 +62,7 @@ namespace Gconnect.Core {
         // Virtual methods, can be overridden because it requires user input.
         // For a CLI daemon, use libinput. For a GUI; use notifications.
         public virtual void ask_pairing_confirmation(string device_id) {
-            var list = Config.Config.instance().get_auto_pair_devices();
+            var list = this.config.get_auto_pair_devices();
             bool trusted = false;
             foreach (string id in list) {
                 if (id==device_id) {
@@ -91,9 +87,10 @@ namespace Gconnect.Core {
 
         
         public Core (TestMode test_mode = 0) {
-            this._dict.link_providers = new HashSet<Connection.LinkProvider>();
-            this._dict.devices = new HashMap<string, DeviceManager.Device>();
-            this._dict.discovery_mode_acquisitions = new HashSet<string>();
+            this.link_providers = new HashSet<Connection.LinkProvider>();
+            this.devices = new HashMap<string, DeviceManager.Device>();
+            this.discovery_mode_acquisitions = new HashSet<string>();
+            this.config = Config.Config.instance();
             
             // Register on DBus
             this.bus_name_id = Bus.own_name (BusType.SESSION, "org.gconnect.core",
@@ -106,15 +103,14 @@ namespace Gconnect.Core {
 
             // Load backends
             if (TestMode.LOOPBACK in test_mode) {
-                this._dict.link_providers.add(new LoopbackConnection.LoopbackLinkProvider());
+                this.link_providers.add(new LoopbackConnection.LoopbackLinkProvider());
             }
 #if GCONNECT_LAN
-            this._dict.link_providers.add(new LanConnection.LanLinkProvider(TestMode.LAN in test_mode));
+            this.link_providers.add(new LanConnection.LanLinkProvider(TestMode.LAN in test_mode));
 #endif
 #if GCONNECT_BLUETOOTH
-            this._dict.link_providers.add(new BluetoothConnection.BluetoothLinkProvider(TestMode.BLUETOOTH in test_mode));
+            this.link_providers.add(new BluetoothConnection.BluetoothLinkProvider(TestMode.BLUETOOTH in test_mode));
 #endif
-            
         }            
 
         private void init_core() {
@@ -127,18 +123,24 @@ namespace Gconnect.Core {
 			}
 
             // Get known paired devices and connect on dbus
-            var list = Config.Config.instance().get_paired_devices();
+            var list = this.config.get_paired_devices();
             debug("Add already paired devices: %s", string.joinv("; ", list));
             foreach (string device_id in list) {
                 this.add_device(new DeviceManager.Device.from_id(device_id));
             }
 
             // Discover new devices
-            foreach (var lp in this._dict.link_providers) {
+            foreach (var lp in this.link_providers) {
                 lp.on_connection_received.connect(this.on_new_device_link);
                 lp.on_start();
             }
 
+            // Change displayed name
+            this.config.notify["device-name"].connect((s,p) => {
+                this.force_on_network_change();
+                this.announced_name_changed(this.config.device_name);
+            });
+            
             debug("Gconnect core started.");
         }
 
@@ -156,22 +158,22 @@ namespace Gconnect.Core {
 
         [Callback]
         public void acquire_discovery_mode(string key) {
-            bool old_state = this._dict.discovery_mode_acquisitions.size==0;
+            bool old_state = this.discovery_mode_acquisitions.size==0;
 
-            this._dict.discovery_mode_acquisitions.add(key);
+            this.discovery_mode_acquisitions.add(key);
 
-            if (old_state != (this._dict.discovery_mode_acquisitions.size==0) ) {
+            if (old_state != (this.discovery_mode_acquisitions.size==0) ) {
                 this.force_on_network_change();
             }
         }
 
         [Callback]
         public void release_discovery_mode(string key) {
-            bool old_state = this._dict.discovery_mode_acquisitions.size==0;
+            bool old_state = this.discovery_mode_acquisitions.size==0;
 
-            this._dict.discovery_mode_acquisitions.remove(key);
+            this.discovery_mode_acquisitions.remove(key);
 
-            if (old_state != (this._dict.discovery_mode_acquisitions.size==0) ) {
+            if (old_state != (this.discovery_mode_acquisitions.size==0) ) {
                 this.clean_devices();
             }
         }
@@ -181,12 +183,19 @@ namespace Gconnect.Core {
             // Unpublish from DBus
             device.unpublish();
             
-            this._dict.devices.unset(device.id);
+            foreach (var provider in link_providers) {
+                if (provider.name == "LanLinkProvider") {
+                    provider.config.remove_device(device);
+                    break;
+                }
+            }
+            
+            this.devices.unset(device.id);
             this.device_removed(id);
         }
 
         private void clean_devices() {
-            foreach (var device in this._dict.devices.values) {
+            foreach (var device in this.devices.values) {
                 if (device.is_paired()) {
                     continue;
                 }
@@ -200,15 +209,15 @@ namespace Gconnect.Core {
         
         [Callback]
         public void force_on_network_change() {
-            debug("Sending onNetworkChange to %d LinkProviders.", this._dict.link_providers.size);
-            foreach (var lp in this._dict.link_providers) {
+            debug("Sending onNetworkChange to %d LinkProviders.", this.link_providers.size);
+            foreach (var lp in this.link_providers) {
                 lp.on_network_change();
             }
         }
 
         [DBus (visible = false)]
         public DeviceManager.Device? get_device(string device_id) {
-            foreach (var device in this._dict.devices.values) {
+            foreach (var device in this.devices.values) {
                 if (device.id == device_id) {
                     return device;
                 }
@@ -217,9 +226,9 @@ namespace Gconnect.Core {
         }
 
         [Callback]
-        public string[] devices(bool only_reachable, bool only_paired) {
+        public string[] list_devices(bool only_reachable, bool only_paired) {
             string[] ret = {};
-            foreach (var device in this._dict.devices.values) {
+            foreach (var device in this.devices.values) {
                 if (only_reachable && !device.is_reachable()) continue;
                 if (only_paired    && !device.is_paired()) continue;
                 ret += device.id;
@@ -233,9 +242,9 @@ namespace Gconnect.Core {
             DeviceManager.Device device = null;
             info("Device discovered %s via %s:\n%s", id, dl.provider.name, identity.to_string());
 
-            if (this._dict.devices.has_key(id)) {
+            if (this.devices.has_key(id)) {
                 debug("It is a known device: %s", id);
-                device = this._dict.devices[id];
+                device = this.devices[id];
                 bool was_reachable = device.is_reachable();
                 device.update_info(identity);
                 device.add_link(dl);
@@ -270,23 +279,23 @@ namespace Gconnect.Core {
 
         public void set_announced_name(string name) {
             debug("Change announcing name.");
-            Config.Config.instance().device_name = name;
+            this.config.device_name = name;
             this.force_on_network_change();
             this.announced_name_changed(name);
         }
 
         public string get_announced_name() {
-            return Config.Config.instance().device_name;
+            return this.config.device_name;
         }
 
         private bool is_discovering_devices()
         {
-            return !(this._dict.discovery_mode_acquisitions.size==0);
+            return !(this.discovery_mode_acquisitions.size==0);
         }
 
         [Callback]
         public string device_id_by_name(string name) {
-            foreach (var device in this._dict.devices.values) {
+            foreach (var device in this.devices.values) {
                 if (device.name == name && device.is_paired()) {
                     return device.id;
                 }
@@ -308,18 +317,25 @@ namespace Gconnect.Core {
             // Publish on DBus
             device.publish(this.conn);
 
-            this._dict.devices[id] = device;
-            assert(this._dict.devices[id] != null);
+            foreach (var provider in link_providers) {
+                if (provider.name == "LanLinkProvider") {
+                    provider.config.add_device(device);
+                    break;
+                }
+            }
+
+            this.devices[id] = device;
+            assert(this.devices[id] != null);
             debug("Device %s added.", id);
             
             this.device_added(id);
             
-            device.reload_plugins();
+//            device.reload_plugins();
         }
 
         public string[] pairing_requests() {
             string[] ret = {};
-            foreach (var device in this._dict.devices.values) {
+            foreach (var device in this.devices.values) {
                 if (device.has_pairing_requests()) {
                     ret += device.id;
                 }
@@ -328,7 +344,7 @@ namespace Gconnect.Core {
         }
 
         public string self_id() {
-            return Config.Config.instance().device_id;
+            return this.config.device_id;
         }
         
         /* DBus was acquired, register plugin objects */
@@ -347,7 +363,7 @@ namespace Gconnect.Core {
         
         private void unpublish () {
             // Unpublish devices
-            foreach (var device in this._dict.devices.values) {
+            foreach (var device in this.devices.values) {
                 device.unpublish();
             }
             // Unpublish core

@@ -37,7 +37,9 @@ list(APPEND GCONNECT_VALA_SOURCES
     #channels/lan/lanpairinghandler.vala
     channels/lan/lanlinkprovider.vala
     channels/lan/landevicelink.vala
+    channels/lan/lanconfig.vala
 )
+
 
 # Any dependencies.  Note that it isn't actually necessary to add
 # glib-2.0 or gobject-2.0 (it is done implicitly), but for this
@@ -47,6 +49,7 @@ set(GCONNECT_VALA_PACKAGES
     libpeas-1.0
 	json-glib-1.0
 	gee-0.8
+	#posix
 	gnutls
 	#libnotify
 	#gdk-3.0
@@ -64,6 +67,10 @@ vala_precompile_target(
     HEADER "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.h"
     crypt/mconn-crypt.c
     crypt/mconn-crypt.vapi
+    crypt/crypt.c
+    crypt/crypt.vapi
+    #vapi/gnutls.vapi
+    vapi/uuid.vapi
     ${GCONNECT_VALA_SOURCES})
 
 # Write list of dependency file (Makefile style)
@@ -76,6 +83,8 @@ endforeach(var)
 #GSettings
 include(GSettings)
 add_schema("gconnect.gschema.xml")
+## Add Lan provider
+add_schema("channels/lan/gconnect.lan.gschema.xml")
 
 # Compile the library.
 #

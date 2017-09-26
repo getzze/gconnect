@@ -54,6 +54,8 @@ namespace Gconnect.DeviceManager {
         public int protocol_version;
         public string[] incoming;
         public string[] outgoing;
+//        internal Gee.HashMap<string, Connection.DeviceLinkInfo> providers;
+        public string ip_address;
         public string encryption;
         
         public string to_string() {
@@ -61,6 +63,7 @@ namespace Gconnect.DeviceManager {
             res += "Protocol: %d\n".printf(protocol_version);
             res += "Incoming capabilities: %s\n".printf(string.joinv(",", incoming));
             res += "Outgoing capabilities: %s\n".printf(string.joinv(",", outgoing));
+            res += "Ip address: %s\n".printf(ip_address);
             res += "Encryption info: %s\n".printf(encryption);
             return res;
         }
@@ -111,6 +114,11 @@ namespace Gconnect.DeviceManager {
         public string encryption_info {
             get { return this.info.encryption;  }
             set { this.info.encryption = value; }
+        }
+
+        public string ip_address {
+            get { return this.info.ip_address;  }
+            set { this.info.ip_address = value; }
         }
 
         /* Signals */
@@ -189,16 +197,21 @@ namespace Gconnect.DeviceManager {
         //Add and remove links
         [DBus (visible = false)]
         public void add_link(Connection.DeviceLink dl)
-                requires (!device_links.contains(dl))
+//                requires (!device_links.contains(dl))
         {
-            debug("Adding link to %s via %s.", this.id, dl.provider.name);
+            if (device_links.contains(dl)) {
+                reload_plugins();
+                return;
+            }
+            
+            var provider = dl.provider.name;
+            debug("Adding link to %s via %s.", this.id, provider);
 
             dl.destroyed.connect(link_destroyed);
+//            info.providers.@set(provider, dl.get_info());
+            dl.parse_device_info(ref this.info);
+            
             device_links.add(dl);
-
-            //Theoretically we will never add two links from the same provider (the provider should destroy
-            //the old one before this is called), so we do not have to worry about destroying old links.
-            //-- Actually, we should not destroy them or the provider will store an invalid ref!
 
             dl.received_packet.connect(private_received_packet);
 
@@ -212,8 +225,6 @@ namespace Gconnect.DeviceManager {
 //                supported_plugins = Plugin.PluginManager.instance().getPluginList().toSet();
 //            }
 
-            //reload_plugins();
-
             if (device_links.size == 1) {
                 reachable_changed(true);
             }
@@ -223,7 +234,7 @@ namespace Gconnect.DeviceManager {
             dl.pairing_request_expired.connect(this.remove_pairing_request);
             dl.pairing_error.connect((s, m)=> {this.pairing_error(m);});
             
-            init_plugins();
+            reload_plugins();
         }
 
         [DBus (visible = false)]
@@ -274,8 +285,6 @@ namespace Gconnect.DeviceManager {
                 }
             }
         }
-
-//         public string getLocalIpAddress();
 
         [Callback]
         [DBus (visible = false)]
@@ -413,17 +422,6 @@ namespace Gconnect.DeviceManager {
             if (!res) {
                 warning("No pair requests to accept!");
             }
-            
-//            debug("Pairing was accepted by user");
-//            if (pair_requests.is_empty) {
-//                warning("No pair requests to accept!");
-//            }
-//            //copying because the pairing handler will be removed upon accept
-//            var copy = new Gee.HashSet<Connection.PairingHandler>();
-//            copy.add_all(pair_requests);
-//            foreach (var ph in copy) {
-//                ph.accept_pairing();
-//            }
         }
 
         [Callback]
@@ -436,17 +434,6 @@ namespace Gconnect.DeviceManager {
             if (!res) {
                 warning("No pair requests to reject!");
             }
-
-//            debug("Pairing was rejected by user");
-//            if (pair_requests.is_empty) {
-//                warning("No pair requests to accept!");
-//            }
-//            //copying because the pairing handler will be removed upon accept
-//            var copy = new Gee.HashSet<Connection.PairingHandler>();
-//            copy.add_all(pair_requests);
-//            foreach (var ph in copy) {
-//                ph.reject_pairing();
-//            }
         }
         
         [Callback]
@@ -457,7 +444,6 @@ namespace Gconnect.DeviceManager {
                 }
             }
             return false;
-//            return !pair_requests.is_empty;
         }
 
         public string icon_name() {

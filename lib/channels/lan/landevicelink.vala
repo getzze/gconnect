@@ -25,6 +25,17 @@ using Gee;
 
 namespace Gconnect.LanConnection {
 
+//    public class LanDeviceLinkInfo : Connection.DeviceLinkInfo {
+//        public string peer_cert;
+//        public string host_address;
+        
+//        public LanDeviceLinkInfo (string cert, string host) {
+//            this.peer_cert = cert;
+//            this.host_address = host;
+//        }
+//    }
+
+
     public class LanDeviceLink : Connection.DeviceLink {
         private weak Socket socket;
 //        private SocketConnection conn;
@@ -52,6 +63,11 @@ namespace Gconnect.LanConnection {
             reset(sock, stream, origin);
         }
             
+        public override void parse_device_info(ref DeviceManager.DeviceInfo dev) {
+            dev.ip_address = host_address.address.to_string();
+            dev.encryption = peer_cert;
+        }
+        
         public override bool link_should_be_kept_alive() { return true;}
 
         private void clean () {

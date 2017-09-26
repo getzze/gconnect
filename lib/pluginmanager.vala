@@ -46,6 +46,9 @@ namespace Gconnect.Plugin {
         }
 
         public string name { get { return plugin_info.get_name();} }
+        public string device_id { get { return device.id;} }
+        public string device_name { get { return device.name;} }
+        public string device_category { get { return device.category;} }
         
         public signal void received_packet(NetworkProtocol.Packet pkt);
         public signal void published();
