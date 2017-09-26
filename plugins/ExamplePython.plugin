@@ -1,7 +1,0 @@
-[Plugin]
-Module=ExamplePython
-Loader=python3
-Name=Example python plugin
-Description=Show debug packets
-X-Outgoing-Capabilities=,
-X-Incoming-Capabilities=debug,

@@ -1,0 +1,7 @@
+[Plugin]
+Module=ping
+Loader=python3
+Name=Ping
+Description=Send and receive pings
+X-Outgoing-Capabilities=kdeconnect.ping
+X-Incoming-Capabilities=kdeconnect.ping

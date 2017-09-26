@@ -1,0 +1,7 @@
+[Plugin]
+Module=battery
+Loader=python3
+Name=Battery
+Description=Show device battery information
+X-Outgoing-Capabilities=kdeconnect.battery.request
+X-Incoming-Capabilities=kdeconnect.battery
