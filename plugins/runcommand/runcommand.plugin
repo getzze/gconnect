@@ -1,0 +1,6 @@
+[Plugin]
+Module=runcommand
+Name=RunCommand
+Description=Execute console commands remotely
+X-Outgoing-Capabilities=kdeconnect.runcommand
+X-Incoming-Capabilities=kdeconnect.runcommand.request

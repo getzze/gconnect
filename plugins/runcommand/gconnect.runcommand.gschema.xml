@@ -1,0 +1,15 @@
+<schemalist>
+  <schema id="org.gconnect.plugin.runcommand" path="/apps/gconnect/plugin/runcommand/" gettext-domain="gconnect">
+
+    <key name="commands" type="a{ss}">
+      <default>{}</default>
+      <summary>Commands to launch from terminal</summary>
+      <description>
+        A dictionary of command name and command line to execute
+      </description>
+    </key>
+
+  </schema>
+</schemalist>
+  
+
