@@ -1,0 +1,6 @@
+[Plugin]
+Module=libremotekeyboard.so
+Name=RemoteKeyboard
+Description=Use your keyboard to send key-events to your paired device
+X-Outgoing-Capabilities=kdeconnect.mousepad.request
+X-Incoming-Capabilities=kdeconnect.mousepad.echo,kdeconnect.mousepad.keyboardstate
