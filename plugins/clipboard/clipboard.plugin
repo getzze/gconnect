@@ -1,0 +1,6 @@
+[Plugin]
+Module=libclipboard.so
+Name=Clipboard
+Description=Share the clipboard between devices
+X-Outgoing-Capabilities=kdeconnect.clipboard
+X-Incoming-Capabilities=kdeconnect.clipboard
