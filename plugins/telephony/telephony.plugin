@@ -1,0 +1,6 @@
+[Plugin]
+Module=libtelephony.so
+Name=Telephony
+Description=Show notifications for calls and SMS
+X-Outgoing-Capabilities=kdeconnect.telephony.request,kdeconnect.sms.request
+X-Incoming-Capabilities=kdeconnect.telephony
