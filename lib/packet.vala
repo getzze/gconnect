@@ -33,12 +33,12 @@ namespace Gconnect.NetworkProtocol {
     }
 
     public class Packet: GLib.Object {
-        
+        private Json.Object body { get; private set; }
+        private Json.Object payload_transfer_info { get; set; }
+
         public int64 id { get; private set; }
         public string packet_type { get; private set; }
-        private Json.Object body { get; private set; }
         public uint64 payload_size { get; private set; }
-        private Json.Object payload_transfer_info { get; set; }
 
         public Packet (string type, int64 id = 0 ) {
             if (id==0) {

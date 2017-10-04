@@ -1,29 +1,25 @@
-/* ex:ts=4:sw=4:sts=4:et */
-/* -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /**
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * Copyright 2017 Bertrand Lacoste <getzze@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License or (at your option) version 3 or any later version
+ * accepted by the membership of KDE e.V. (or its successor approved
+ * by the membership of KDE e.V.), which shall act as a proxy
+ * defined in Section 14 of version 3 of the license.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- *
- * AUTHORS
- * Maciek Borzecki <maciek.borzecki (at] gmail.com>
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <gnutls/gnutls.h>
-//#include <gnutls/extra.h>
-#include <gnutls/x509.h>
-
+ 
 #include <string.h>
 #include <stdio.h>
-#include <time.h>
 #include <sys/stat.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -31,149 +27,203 @@
 
 #include "crypt.h"
 
-typedef struct _GconnectCryptCryptPrivate      GconnectCryptCryptPrivate;
 
-/**
- * GconnectCryptCrypt:
- *
- * A simple wrapper for crypto operations.
- **/
+static char *fread_file (FILE * stream, size_t * length);
 
-struct _GconnectCryptCrypt
+gnutls_x509_privkey_t gconnect_crypt_import_private_key_from_pem_file(const char *path)
 {
-    GObject parent;
-    GconnectCryptCryptPrivate *priv;
-};
-
-struct _GconnectCryptCryptPrivate
-{
-    char                     uuid[37];          /* UUID for certificate CommonName */
-    gnutls_x509_privkey_t    *key;           /* RSA key wrapper */
-    gnutls_x509_crt_t        *cert;          /* Certificate wrapper */
-};
-
-static void gconnect_crypt_crypt_dispose (GObject *object);
-static void gconnect_crypt_crypt_finalize (GObject *object);
-
-static gboolean __gconnect_crypt_load_key(GconnectCryptCryptPrivate *priv, const char *path);
-static gboolean __gconnect_crypt_load_cert(GconnectCryptCryptPrivate *priv, const char *path);
-static gboolean __gconnect_crypt_generate_key_at_path(const char *path);
-static gboolean __gconnect_crypt_generate_certificate_at_path(const gnutls_x509_privkey_t *key, const char *cert_path,
-                const char *CommonName, const char *OrganizationName, const char *OrganizationUnit, int YearsValid);
-static gboolean __gconnect_crypt_append_extension(gnutls_x509_crt_t *crt);
-
-G_DEFINE_TYPE_WITH_PRIVATE (GconnectCryptCrypt, gconnect_crypt_crypt, G_TYPE_OBJECT);
-
-static void
-gconnect_crypt_crypt_class_init (GconnectCryptCryptClass *klass)
-{
-    GObjectClass *gobject_class = (GObjectClass *)klass;
-
-    gobject_class->dispose = gconnect_crypt_crypt_dispose;
-    gobject_class->finalize = gconnect_crypt_crypt_finalize;
-}
-
-static void
-gconnect_crypt_crypt_init (GconnectCryptCrypt *self)
-{
-    g_debug("crypt: new instance");
-    self->priv = gconnect_crypt_crypt_get_instance_private(self);
-}
-
-static void
-gconnect_crypt_crypt_dispose (GObject *object)
-{
-    GconnectCryptCrypt *self = (GconnectCryptCrypt *)object;
-
-    if (self->priv->key != NULL)
-    {
-        gnutls_x509_privkey_deinit(self->priv->key);
-        self->priv->key = NULL;
-    }
-
-    if (self->priv->cert != NULL)
-    {
-        gnutls_x509_crt_deinit(self->priv->cert);
-        self->priv->cert = NULL;
-    }
-
-    G_OBJECT_CLASS (gconnect_crypt_crypt_parent_class)->dispose (object);
-}
-
-static void
-gconnect_crypt_crypt_finalize (GObject *object)
-{
-    GconnectCryptCrypt *self = (GconnectCryptCrypt *)object;
-
-    g_signal_handlers_destroy (object);
-    G_OBJECT_CLASS (gconnect_crypt_crypt_parent_class)->finalize (object);
-}
-
-GconnectCryptCrypt *gconnect_crypt_crypt_new_for_key_path(const char *path)
-{
-
-    GconnectCryptCrypt *self = g_object_new(GCONNECT_CRYPT_TYPE_CRYPT, NULL);
+    gnutls_x509_privkey_t key;
+    size_t size;
+    int res = 0;
+    gnutls_datum_t pem;
+    FILE *infile;
 
     if (g_file_test(path, G_FILE_TEST_EXISTS) == FALSE)
     {
-        g_debug("crypt: generate new private key at path %s", path);
-        __gconnect_crypt_generate_key_at_path(path);
-    }
-
-    if (__gconnect_crypt_load_key(self->priv, path) == FALSE)
-    {
-        gconnect_crypt_crypt_unref(self);
+        g_critical("crypt: key file %s does not exist", path);
         return NULL;
     }
 
-    return self;
+    g_debug("crypt: loading key from %s", path);
+
+    infile = fopen(path, "rb");
+    if (infile == NULL)
+    {
+        g_critical("crypt: failed to open file %s", path);
+        return NULL;
+    }
+
+    pem.data = fread_file (infile, &size);
+    pem.size = size;
+
+    fclose( infile );
+    gnutls_x509_privkey_init(&key);
+
+
+    res = gnutls_x509_privkey_import (key, &pem, GNUTLS_X509_FMT_PEM);
+    if (res < 0)
+    {
+        g_critical("crypt: import error: %s", gnutls_strerror(res));
+        return NULL;
+    }
+    free(pem.data);
+    return key;
 }
 
-GconnectCryptCrypt *gconnect_crypt_crypt_new(const char *key_path, const char *cert_path, const char *uuid)
+gnutls_x509_crt_t gconnect_crypt_import_certificate_from_pem_file(const char *path)
 {
-    GconnectCryptCrypt *self = gconnect_crypt_crypt_new_for_key_path(key_path);
-    g_assert(self);
+    gnutls_x509_crt_t cert;
+    size_t size;
+    int res = 0;
+    gnutls_datum_t pem;
+    FILE *infile;
 
+    if (g_file_test(path, G_FILE_TEST_EXISTS) == FALSE)
+    {
+        g_critical("crypt: cert file %s does not exist", path);
+        return NULL;
+    }
+
+    g_debug("crypt: loading cert from %s", path);
+
+    infile = fopen(path, "rb");
+    if (infile == NULL)
+    {
+        g_critical("crypt: failed to open file %s", path);
+        return NULL;
+    }
+
+    pem.data = fread_file (infile, &size);
+    pem.size = size;
+
+    fclose( infile );
+    gnutls_x509_crt_init (&cert);
+
+    res = gnutls_x509_crt_import (cert, &pem, GNUTLS_X509_FMT_PEM);
+    if (res < 0)
+    {
+        g_critical("crypt: import error: %s", gnutls_strerror(res));
+        return NULL;
+    }
+
+    free(pem.data);
+    return cert;
+}
+
+gboolean gconnect_crypt_export_private_key_to_pem_file(const gnutls_x509_privkey_t *key, const char *path)
+{
+    int res;
+    size_t size;
+    unsigned char buffer[64 * 1024];
+    const int buffer_size = sizeof (buffer);
+    FILE *outfile;
+
+    g_assert(key);
+    size = buffer_size;
+    res = gnutls_x509_privkey_export (key, GNUTLS_X509_FMT_PEM, buffer, &size);
+    if (res < 0)
+    {
+        g_critical("crypt: cannot export private key: %s", gnutls_strerror (res));
+        return FALSE;
+    }
+
+    outfile = fopen(path, "wb");
+    if (outfile == NULL)
+    {
+        g_critical("crypt: failed to open file %s", path);
+        return FALSE;
+    }
+    fwrite (buffer, 1, size, outfile);
+    fclose( outfile );
+
+    return TRUE;
+}
+
+gboolean gconnect_crypt_export_certificate_to_pem_file(const gnutls_x509_crt_t *crt, const char *path)
+{
+    int res;
+    size_t size;
+    unsigned char buffer[64 * 1024];
+    const int buffer_size = sizeof (buffer);
+    FILE *outfile;
+
+    g_assert(crt);
+    size = buffer_size;
+    res = gnutls_x509_crt_export (crt, GNUTLS_X509_FMT_PEM, buffer, &size);
+    if (res < 0)
+    {
+        g_critical("crypt: cannot export certificate: %s", gnutls_strerror (res));
+        return FALSE;
+    }
+
+    outfile = fopen(path, "wb");
+    if (outfile == NULL)
+    {
+        g_critical("crypt: failed to open file %s", path);
+        return FALSE;
+    }
+    fwrite (buffer, 1, size, outfile);
+    fclose( outfile );
+
+    return TRUE;
+}
+
+gnutls_x509_crt_t gconnect_crypt_certificate_create(const gnutls_x509_privkey_t *key, guchar serial)
+{
+    gnutls_x509_crt_t crt;
+    size_t size;
+    int res;
+    unsigned char buffer[64 * 1024];
+    const int buffer_size = sizeof (buffer);
+
+    gnutls_x509_crt_init (&crt);
+
+    // Version v3
+    res = gnutls_x509_crt_set_version (crt, 3);
+    if (res < 0)
+    {
+        g_critical("crypt: cannot set certificate version: %s", gnutls_strerror (res));
+        return FALSE;
+    }
+
+    // Serial
+    {
+        guchar bin_serial[1];
+        bin_serial[0] = serial;
+        res = gnutls_x509_crt_set_serial (crt, bin_serial, 1);
+        if (res < 0)
+        {
+            g_critical("crypt: cannot set certificate serial: %s", gnutls_strerror (res));
+            return NULL;
+        }
+    }
     
-    g_assert(self->priv);
-    g_assert(self->priv->key);
-
-    strcpy(self->priv->uuid, uuid);
-    g_assert(self->priv->uuid);
-        
-    if (g_file_test(cert_path, G_FILE_TEST_EXISTS) == FALSE)
+    g_debug("crypt: assign private key to certificate");
+    res = gnutls_x509_crt_set_key(crt, key);
+    if (res < 0)
     {
-        g_debug("crypt: generate new certificate at path %s", cert_path);
-        __gconnect_crypt_generate_certificate_at_path(self->priv->key, cert_path, self->priv->uuid, "KDE", "KDE Connect", 10);
-    }
-
-    if (__gconnect_crypt_load_cert(self->priv, cert_path) == FALSE)
-    {
-        gconnect_crypt_crypt_unref(self);
+        g_critical("crypt: cannot set certificate private key: %s", gnutls_strerror (res));
         return NULL;
     }
 
-    return self;
-}
-
-GconnectCryptCrypt * gconnect_crypt_crypt_ref(GconnectCryptCrypt *self)
-{
-    g_assert(IS_GCONNECT_CRYPT_CRYPT(self));
-    return GCONNECT_CRYPT_CRYPT(g_object_ref(self));
-}
-
-void gconnect_crypt_crypt_unref(GconnectCryptCrypt *self)
-{
-    if (self != NULL)
+    // Subject Key ID.
+    size = buffer_size;
+    res = gnutls_x509_crt_get_key_id (crt, 0, buffer, &size);
+    if (res >= 0)
     {
-        g_assert(IS_GCONNECT_CRYPT_CRYPT(self));
-        g_object_unref(self);
+        res = gnutls_x509_crt_set_subject_key_id (crt, buffer, size);
+        if (res < 0)
+        {
+            g_critical("crypt: cannot set subject key id: %s", gnutls_strerror (res));
+            return NULL;
+        }
     }
+    return crt;
 }
 
 
 /**
- *
+ *  Copied directly from GnuTLS code
  */
 static char *fread_file (FILE * stream, size_t * length)
 {
@@ -272,326 +322,4 @@ static char *fread_file (FILE * stream, size_t * length)
     errno = save_errno;
     return NULL;
   }
-}
-
-static gboolean __gconnect_crypt_load_key(GconnectCryptCryptPrivate *priv, const char *path)
-{
-    gnutls_x509_privkey_t key;
-    size_t size;
-    int res = 0;
-    gnutls_datum_t pem;
-    FILE *infile;
-
-    if (g_file_test(path, G_FILE_TEST_EXISTS) == FALSE)
-    {
-        g_critical("crypt: key file %s does not exist", path);
-        return FALSE;
-    }
-
-    g_debug("crypt: loading key from %s", path);
-
-    infile = fopen(path, "rb");
-    if (infile == NULL)
-    {
-        g_critical("crypt: failed to open file %s", path);
-        return FALSE;
-    }
-
-    pem.data = fread_file (infile, &size);
-    pem.size = size;
-
-    fclose( infile );
-    gnutls_x509_privkey_init(&key);
-
-
-    res = gnutls_x509_privkey_import (key, &pem, GNUTLS_X509_FMT_PEM);
-    if (res < 0)
-    {
-        g_critical("crypt: import error: %s", gnutls_strerror(res));
-        return FALSE;
-    }
-
-    priv->key = &key;
-
-    free(pem.data);
-    return TRUE;
-}
-
-static gboolean __gconnect_crypt_load_cert(GconnectCryptCryptPrivate *priv, const char *path)
-{
-    gnutls_x509_crt_t cert;
-    size_t size;
-    int res = 0;
-    gnutls_datum_t pem;
-    FILE *infile;
-
-    if (g_file_test(path, G_FILE_TEST_EXISTS) == FALSE)
-    {
-        g_critical("crypt: cert file %s does not exist", path);
-        return FALSE;
-    }
-
-    g_debug("crypt: loading cert from %s", path);
-
-    infile = fopen(path, "rb");
-    if (infile == NULL)
-    {
-        g_critical("crypt: failed to open file %s", path);
-        return FALSE;
-    }
-
-    pem.data = fread_file (infile, &size);
-    pem.size = size;
-
-    fclose( infile );
-    gnutls_x509_crt_init (&cert);
-
-    res = gnutls_x509_crt_import (cert, &pem, GNUTLS_X509_FMT_PEM);
-    if (res < 0)
-    {
-        g_critical("crypt: import error: %s", gnutls_strerror(res));
-        return FALSE;
-    }
-
-    priv->cert = &cert;
-
-    free(pem.data);
-    return TRUE;
-}
-
-static gboolean __gconnect_crypt_generate_key_at_path(const char *path)
-{
-    gnutls_x509_privkey_t *key;
-    int res, key_type, bits;
-    size_t size;
-    unsigned char buffer[64 * 1024];
-    const int buffer_size = sizeof (buffer);
-    FILE *outfile;
-   
-    key_type = GNUTLS_PK_RSA;
-    bits = 2048;
-   
-    res = gnutls_x509_privkey_init (key);
-    if (res < 0)
-    {
-        g_critical("crypt: cannot initiate private key: %s", gnutls_strerror (res));
-        return FALSE;
-    }
-
-    res = gnutls_x509_privkey_generate(*key, key_type, bits, 0);
-    if (res < 0 || !key)
-    {
-        g_critical("crypt: cannot generate private key: %s", gnutls_strerror (res));
-        gnutls_x509_privkey_deinit(*key);
-        return FALSE;
-    }
-
-    size = buffer_size;
-    res = gnutls_x509_privkey_export (*key, GNUTLS_X509_FMT_PEM, buffer, &size);
-    gnutls_x509_privkey_deinit(*key);
-    if (res < 0)
-    {
-        g_critical("crypt: cannot export private key: %s", gnutls_strerror (res));
-        return FALSE;
-    }
-
-    outfile = fopen(path, "wb");
-    if (outfile == NULL)
-    {
-        g_critical("crypt: failed to open file %s", path);
-        return FALSE;
-    }
-    fwrite (buffer, 1, size, outfile);
-    fclose( outfile );
-
-    return TRUE;
-}
-
-static gboolean __gconnect_crypt_append_extension (gnutls_x509_crt_t *crt)
-{
-    /* append additional extensions */
-    int client, ca_status = 0, is_ike = 0, signing_key = 0;
-    unsigned int usage = 0, server;
-
-    ca_status = 1;
-    client = 1;
-    server = 1;
-    is_ike = 0;
-    signing_key = 0;
-    
-
-    gnutls_x509_crt_set_basic_constraints (*crt, ca_status, -1);
-    if (client)
-    {
-        gnutls_x509_crt_set_key_purpose_oid (*crt, GNUTLS_KP_TLS_WWW_CLIENT, 0);
-    }
-
-    if ( server != 0 || is_ike)
-      {
-        //get_dns_name_set (TYPE_CRT, crt);
-        //get_ip_addr_set (TYPE_CRT, crt);
-      }
-
-    if (server != 0)
-    {
-        gnutls_x509_crt_set_key_purpose_oid (*crt, GNUTLS_KP_TLS_WWW_SERVER, 0);
-    }
-
-    if (!ca_status || server)
-      {
-        int encryption_key = 0;
-
-        if (signing_key)
-            usage |= GNUTLS_KEY_DIGITAL_SIGNATURE;
-
-        if (encryption_key)
-            usage |= GNUTLS_KEY_KEY_ENCIPHERMENT;
-
-        if (is_ike)
-          {
-            gnutls_x509_crt_set_key_purpose_oid (*crt, GNUTLS_KP_IPSEC_IKE, 0);
-          }
-      }
-
-
-    if (ca_status)
-    {
-        int cert_signing_key = 0;
-        int crl_signing_key = 0;
-        int code_signing_key = 0;
-        int ocsp_signing_key = 0;
-        int time_stamping_key = 0;
-
-        if (cert_signing_key)
-            usage |= GNUTLS_KEY_KEY_CERT_SIGN;
-
-        if (crl_signing_key)
-            usage |= GNUTLS_KEY_CRL_SIGN;
-
-        if (code_signing_key)
-        {
-            gnutls_x509_crt_set_key_purpose_oid (*crt, GNUTLS_KP_CODE_SIGNING, 0);
-        }
-
-        if (ocsp_signing_key)
-        {
-            gnutls_x509_crt_set_key_purpose_oid (*crt, GNUTLS_KP_OCSP_SIGNING, 0);
-        }
-
-        if (time_stamping_key)
-        {
-            gnutls_x509_crt_set_key_purpose_oid (crt, GNUTLS_KP_TIME_STAMPING, 0);
-        }
-    }
-
-    if (usage != 0)
-    {
-        /* http://tools.ietf.org/html/rfc4945#section-5.1.3.2: if any KU is
-           set, then either digitalSignature or the nonRepudiation bits in the
-           KeyUsage extension MUST for all IKE certs */
-        if (is_ike && (signing_key != 1))
-            usage |= GNUTLS_KEY_NON_REPUDIATION;
-        gnutls_x509_crt_set_key_usage (*crt, usage);
-    }
-}
-
-static gboolean __gconnect_crypt_generate_certificate_at_path(const gnutls_x509_privkey_t *key, const char *path,
-                const char *CommonName, const char *OrganizationName, const char *OrganizationUnit, int YearsValid)
-{
-    gnutls_x509_crt_t crt;
-    size_t size;
-    int res;
-    unsigned char buffer[64 * 1024];
-    const int buffer_size = sizeof (buffer);
-    FILE *outfile;
-
-    res = gnutls_x509_crt_init (&crt);
-    if (res < 0)
-    {
-        g_critical("crypt: cannot initialize certificate: %s", gnutls_strerror (res));
-        return FALSE;
-    }
-   
-    res = gnutls_x509_crt_set_version (crt, 3);
-    if (res < 0)
-    {
-        g_critical("crypt: cannot set certificate version: %s", gnutls_strerror (res));
-        return FALSE;
-    }
-
-    gnutls_x509_crt_set_dn_by_oid (crt, GNUTLS_OID_X520_COMMON_NAME, 0, CommonName, strlen(CommonName));
-    gnutls_x509_crt_set_dn_by_oid (crt, GNUTLS_OID_X520_ORGANIZATION_NAME, 0, OrganizationName, strlen(OrganizationName));
-    gnutls_x509_crt_set_dn_by_oid (crt, GNUTLS_OID_X520_ORGANIZATIONAL_UNIT_NAME, 0, OrganizationUnit, strlen(OrganizationUnit));
-    {
-        char bin_serial[1];
-        bin_serial[0] = 0x02;
-        res = gnutls_x509_crt_set_serial (crt, bin_serial, 1);
-        if (res < 0)
-        {
-            g_critical("crypt: cannot set certificate serial: %s", gnutls_strerror (res));
-            return FALSE;
-        }
-    }
-
-    time_t now = time (NULL);
-    gnutls_x509_crt_set_activation_time (crt, now);
-    gnutls_x509_crt_set_expiration_time (crt, now + YearsValid * 365 * 24 * 60 * 60);
-
-    g_debug("crypt: assign private key to certificate");
-    res = gnutls_x509_crt_set_key(crt, *key);
-    if (res < 0)
-    {
-        g_critical("crypt: cannot set certificate private key: %s", gnutls_strerror (res));
-        return FALSE;
-    }
-
-    /* Subject Key ID.
-     */
-    size = buffer_size;
-    res = gnutls_x509_crt_get_key_id (crt, 0, buffer, &size);
-    if (res >= 0)
-    {
-        res = gnutls_x509_crt_set_subject_key_id (crt, buffer, size);
-        if (res < 0)
-        {
-            g_critical("crypt: cannot set subject key id: %s", gnutls_strerror (res));
-            return FALSE;
-        }
-    }
-
-    gnutls_x509_crt_set_key_purpose_oid (crt, GNUTLS_KP_TLS_WWW_CLIENT, 0);
-    gnutls_x509_crt_set_key_purpose_oid (crt, GNUTLS_KP_TLS_WWW_SERVER, 0);
-
-    gnutls_x509_crt_set_basic_constraints (crt, 1, -1);  // CA authority
-
-
-    // Signing certificate
-    g_debug("crypt: signing certificate");
-  
-    res = gnutls_x509_crt_sign2 (crt, crt, *key, GNUTLS_DIG_SHA256, 0);
-    if (res < 0)
-    {
-        g_critical("crypt: error signing certificate: %s", gnutls_strerror (res));
-        return FALSE;
-    }
-    
-    size = buffer_size;
-    res = gnutls_x509_crt_export (crt, GNUTLS_X509_FMT_PEM, buffer, &size);
-    gnutls_x509_crt_deinit(crt);
-    if (res < 0)
-    {
-        g_critical("crypt: cannot export certificate: %s", gnutls_strerror (res));
-        return FALSE;
-    }
-  
-    outfile = fopen(path, "wb");
-    if (outfile == NULL)
-    {
-        g_critical("crypt: failed to open file %s", path);
-        return FALSE;
-    }
-    fwrite (buffer, 1, size, outfile);
-    fclose( outfile );
-
-    return TRUE;
 }

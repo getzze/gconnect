@@ -36,6 +36,8 @@ namespace Gconnect.Plugin {
         public abstract void deactivate();
     }
     
+    public delegate uint RegisterDbus(DBusConnection conn) throws IOError;
+    
     public class PluginProxy : GLib.Object {
         private weak DeviceManager.Device device;
         private weak Peas.PluginInfo plugin_info;
@@ -53,7 +55,7 @@ namespace Gconnect.Plugin {
         public signal void received_packet(NetworkProtocol.Packet pkt);
         public signal void published();
         
-        public PluginProxy(Peas.PluginInfo pinfo, DeviceManager.Device dev) {
+        internal PluginProxy(Peas.PluginInfo pinfo, DeviceManager.Device dev) {
             this.device = dev;
             this.plugin_info = pinfo;
             this.device.dbus_published.connect(()=>{ this.published(); });
@@ -97,6 +99,15 @@ namespace Gconnect.Plugin {
             }
         }
         
+        public void register(RegisterDbus reg) {
+            try {
+                var conn = dbus_connection();
+                this.bus_id = reg(conn);
+            } catch (IOError e) {
+                warning("Could not register plugin to dbus: %s", e.message);
+            }
+        }
+
         public void register_object(DBusInterfaceInfo interface_info,
                                     Closure? method_call_closure,
                                     Closure? get_property_closure,

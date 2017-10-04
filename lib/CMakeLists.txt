@@ -4,7 +4,6 @@
 
 # The library short description
 set(GCONNECT_SHORT_DESCRIPTION "KDEConnect protocol implementation in Vala")
-set(GCONNECT_PLUGIN_SUBDIR "${PROJECT_NAME}/plugins/")
 
 # Generate a config.vala file, which can be used for version
 # information and feature detection.
@@ -48,12 +47,8 @@ list(APPEND GCONNECT_VALA_SOURCES
 set(GCONNECT_VALA_PACKAGES
     libpeas-1.0
 	json-glib-1.0
-	gee-0.8
-	#posix
-	gnutls
-	#libnotify
-	#gdk-3.0
-    #gio-2.0
+	libpeas-1.0
+    gee-0.8
 )
 
 # Compile Vala -> C
@@ -69,16 +64,20 @@ vala_precompile_target(
     crypt/mconn-crypt.vapi
     crypt/crypt.c
     crypt/crypt.vapi
-    #vapi/gnutls.vapi
-    vapi/uuid.vapi
+    ${GCONNECT_CUSTOM_VAPIS}/gnutls.vapi
+    ${GCONNECT_CUSTOM_VAPIS}/uuid.vapi
     ${GCONNECT_VALA_SOURCES})
 
-# Write list of dependency file (Makefile style)
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.deps" "" )
-foreach(var ${GCONNECT_VALA_PACKAGES})
-    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.deps"
-        "${var}\n")
-endforeach(var)
+## Uncomment if external dependencies are required
+## Any dependencies that appear in the library vapi
+## they should be included in the .deps file
+#set(GCONNECT_VALA_EXTERN_PACKAGES)
+## Write list of dependency file (Makefile style)
+#file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.deps" "" )
+#foreach(var ${GCONNECT_VALA_EXTERN_PACKAGES})
+    #file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.deps"
+        #"${var}\n")
+#endforeach(var)
 
 #GSettings
 include(GSettings)

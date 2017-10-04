@@ -119,14 +119,14 @@ namespace Gconnect.LanConnection {
 
         public override void add_device(DeviceManager.Device dev) {
             string ip = dev.ip_address;
-            if (ip != "" && ip in known_ip_addresses) {
+            if (ip != "" && !known_ip_addresses.contains(ip)) {
                 known_ip_addresses.add(ip);
             }
         }
         
         public override void remove_device(DeviceManager.Device dev) {
             string ip = dev.ip_address;
-            if (ip != "" && ip in known_ip_addresses) {
+            if (ip != "" && known_ip_addresses.contains(ip)) {
                 known_ip_addresses.remove(ip);
             }
         }

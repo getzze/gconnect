@@ -36,7 +36,7 @@
 
     <child name="providers" schema="org.gconnect.providers"/>
     <child name="devices" schema="org.gconnect.paired-devices"/>
-    <child name="plugins" schema="org.gconnect.plugins"/>
+    <child name="plugin" schema="org.gconnect.plugin"/>
 
   </schema>
   
@@ -49,7 +49,7 @@
 -->
   </schema>
 
-  <schema id="org.gconnect.plugins" path="/apps/gconnect/plugins/">
+  <schema id="org.gconnect.plugin" path="/apps/gconnect/plugin/">
   </schema>
 
   <schema id="org.gconnect.device">

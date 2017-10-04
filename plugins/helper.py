@@ -1,3 +1,14 @@
+
+import gi
+gi.require_version('Gconnect', '0.1')
+gi.require_version('Peas', '1.0')
+
+from gi.repository import GObject
+from gi.repository import Gio
+from gi.repository import GLib
+from gi.repository import Peas
+from gi.repository import Gconnect
+
 import json
 import logging
 
@@ -9,8 +20,16 @@ def dict_to_packet(head: str, d: dict) -> Gconnect.NetworkProtocolPacket:
     pkt = Gconnect.NetworkProtocolPacket.with_string_body(head, s)
     return pkt
 
+#def packet_to_dict(pkt) -> dict:
+    #return json.loads(pkt.serialize())["body"]
+
+#def dict_to_packet(head: str, d: dict):
+    #s = json.dumps(d)
+    #pkt=""
+    #return pkt
+
 def prepare_logger(name):
-    logger = logging.getLogger(name)
+    logger = logging.getLogger("gconnect.plugin.{}".format(name))
     logger.setLevel(logging.DEBUG)
     logformatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     stream_handler = logging.StreamHandler()
@@ -19,12 +38,11 @@ def prepare_logger(name):
     logger.addHandler(stream_handler)
     return logger
 
-logger = prepare_logger(__name__)
-
 class SimpleProxy:
     def __init__(self, proxy):
         self.proxy = proxy
         self.name = self.proxy.get_name()
+        self.logger = prepare_logger(self.name)
         if not hasattr(self, "PACKET_TYPE_REQUEST"):
             raise NotImplementedError("The PACKET_TYPE_REQUEST attribute must be defined")
         self.proxy.connect("received_packet", self.receive)
@@ -37,7 +55,7 @@ class SimpleProxy:
         try:
             self.proxy.request(dict_to_packet(self.PACKET_TYPE_REQUEST, d))
         except (TypeError, AttributeError) as err:
-            logger.exception("Could not send packet")
+            self.logger.exception("Could not send packet")
         
     # Treat a received packet
     def receive(self, sender, pkt: Gconnect.NetworkProtocolPacket):
@@ -90,7 +108,7 @@ class DbusProxy(SimpleProxy):
                     raise TypeError("Variant not of tuple type, add parenthesis around the variant_type and the variant_value should be a tuple")
                 self.proxy.emit_signal(self.dbus_interface(), name, var)
             except (TypeError, AttributeError) as err:
-                logger.exception("Could not emit signal")
+                self.logger.exception("Could not emit signal")
 
     def publish(self, sender):
         def method_call_cb(connection, sender, object_path, interface_name, method_name, parameters, invocation, *user_data):
@@ -103,7 +121,7 @@ class DbusProxy(SimpleProxy):
                 None,
                 None)
         except (TypeError, AttributeError):
-            logger.exception("Could not register object")
+            self.logger.exception("Could not register object")
         else:
             self.dbus_published = True
             self.proxy.log("Publish interface {} to dbus".format(self.interface_info.name))
@@ -113,5 +131,5 @@ class DbusProxy(SimpleProxy):
             try:
                 self.proxy.unpublish()
             except (TypeError, AttributeError):
-                logger.exception("Could not unregister object")
-    
+                self.logger.exception("Could not unregister object")
+

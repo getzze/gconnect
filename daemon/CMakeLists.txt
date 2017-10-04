@@ -8,22 +8,34 @@ set (GCONNECT_DAEMON_NAME  "${PROJECT_NAME}d")
 # glib-2.0 or gobject-2.0 (it is done implicitly), but for this
 # template project we don't actually depend on anything else, so we
 # added it for illustrative purposes.
-file(STRINGS 
-    "${CMAKE_BINARY_DIR}/lib/gconnect-${GCONNECT_VERSION_API}.deps"
-    GCONNECT_VALA_PACKAGES)
+set(DEPS_FILE "${CMAKE_BINARY_DIR}/lib/gconnect-${GCONNECT_VERSION_API}.deps")
+if(EXISTS "${DEPS_FILE}")
+    file(STRINGS 
+        "${DEPS_FILE}"      
+        GCONNECT_DAEMON_VALA_PACKAGES)
+else()
+    set(GCONNECT_DAEMON_VALA_PACKAGES)
+endif()
 
-list(APPEND GCONNECT_VALA_PACKAGES
-	#gdk-3.0
+list(APPEND GCONNECT_DAEMON_VALA_PACKAGES
+    gee-0.8
     libnotify)
+
+pkg_check_modules(DAEMON_DEPS REQUIRED libnotify)
+include_directories(${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${DAEMON_DEPS_INCLUDE_DIRS})
+add_definitions(${DAEMON_DEPS_CFLAGS} ${DAEMON_DEPS_CFLAGS_OTHER})
+link_libraries(${DAEMON_DEPS_LIBRARIES})
+link_directories(${DAEMON_DEPS_LIBRARY_DIRS})
     
 # Compile Vala sources to C
 vala_precompile_target(
-  "${GCONNECT_DAEMON_NAME}-vala"
-  GCONNECT_MAIN_SOURCES
-  ${CMAKE_BINARY_DIR}/lib/gconnect-${GCONNECT_VERSION_API}.vapi
-  main.vala
-  PACKAGES ${GCONNECT_VALA_PACKAGES}
-  DEPENDS "${GCONNECT_LIBRARY_NAME}-vala")
+    "${GCONNECT_DAEMON_NAME}-vala"
+    GCONNECT_MAIN_SOURCES
+    ${CMAKE_BINARY_DIR}/lib/gconnect-${GCONNECT_VERSION_API}.vapi
+    main.vala
+    PACKAGES ${GCONNECT_DAEMON_VALA_PACKAGES}
+    DEPENDS "${GCONNECT_LIBRARY_NAME}-vala"
+)
 
 # Tell CMake to create an executable named "gconnectd"
 add_executable(${GCONNECT_DAEMON_NAME}

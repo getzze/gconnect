@@ -114,7 +114,7 @@ namespace Gconnect {
 
             if (debug) {
                 Environment.set_variable("G_MESSAGES_DEBUG", "all", false);
-                stdout.printf ("Debug mode.\n");
+                message("Gconnect daemon started in debug mode.");
             }
 
 //            Gdk.init(ref args);

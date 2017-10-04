@@ -86,7 +86,7 @@ namespace Gconnect.Core {
         }
 
         
-        public Core (TestMode test_mode = 0) {
+        protected Core (TestMode test_mode = 0) {
             this.link_providers = new HashSet<Connection.LinkProvider>();
             this.devices = new HashMap<string, DeviceManager.Device>();
             this.discovery_mode_acquisitions = new HashSet<string>();
@@ -112,7 +112,11 @@ namespace Gconnect.Core {
             this.link_providers.add(new BluetoothConnection.BluetoothLinkProvider(TestMode.BLUETOOTH in test_mode));
 #endif
         }            
-
+        
+        ~Core () {
+            this.close();
+        }
+        
         private void init_core() {
             // Register Core on dbus
 			try	{

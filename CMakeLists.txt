@@ -70,90 +70,53 @@ find_package(GLib "2.38" REQUIRED)
 find_package(Vala "0.30" REQUIRED)
 
 find_package(PkgConfig)
-pkg_check_modules(GOBJECT REQUIRED gobject-2.0)
-pkg_check_modules(GIO REQUIRED gio-2.0)
-pkg_check_modules(GTHREAD REQUIRED gthread-2.0)
-pkg_check_modules(GEE REQUIRED gee-0.8)
-pkg_check_modules(JSON-GLIB REQUIRED json-glib-1.0)
-pkg_check_modules(LIBPEAS REQUIRED libpeas-1.0)
-pkg_check_modules(LIBNOTIFY REQUIRED libnotify)
-pkg_check_modules(GNUTLS REQUIRED gnutls)
-pkg_check_modules(OPENSSL REQUIRED openssl)
-
-##
-## Libnotify
-##
-#pkg_check_modules (LIBNOTIFY QUIET libnotify)
-#if (LIBNOTIFY_FOUND)
-    #message ("-- libnotify enabled")
-    #set (GLOBAL_VALAC_OPTIONS ${GLOBAL_VALAC_OPTIONS} --define=HAVE_LIBNOTIFY)
-    #set (DEPS_PACKAGES ${DEPS_PACKAGES} libnotify)
-    #set (DEPS_CFLAGS ${DEPS_CFLAGS} ${LIBNOTIFY_CFLAGS})
-    #set (DEPS_LIBRARIES ${DEPS_LIBRARIES} ${LIBNOTIFY_LIBRARIES})
-    #set (DEPS_LIBRARY_DIRS ${DEPS_LIBRARY_DIRS} ${LIBNOTIFY_LIBRARY_DIRS})
-#else ()
-    #message ("-- libnotify disabled")
-#endif ()
-
+pkg_check_modules(REQ_DEPS REQUIRED
+    gobject-2.0
+    gio-2.0
+    #gthread-2.0
+    gee-0.8
+    json-glib-1.0
+    libpeas-1.0
+    gnutls
+)
+pkg_check_modules(OPT_DEPS REQUIRED
+    openssl
+)
 
 include_directories(
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-    ${GEE_INCLUDE_DIRS}
-    ${JSON-GLIB_INCLUDE_DIRS}
-    ${LIBPEAS_INCLUDE_DIRS}
-    ${LIBNOTIFY_INCLUDE_DIRS}
-    ${GNUTLS_INCLUDE_DIRS}
-    ${OPENSSL_INCLUDE_DIRS}
+    ${REQ_DEPS_INCLUDE_DIRS}
+    ${OPT_DEPS_INCLUDE_DIRS}
 )
 
-set(DEPS_CFLAGS
-	${GOBJECT_CFLAGS} ${GOBJECT_CFLAGS_OTHER}
-	${GIO_CFLAGS} ${GIO_CFLAGS_OTHER}
-	${GTHREAD_CFLAGS} ${GTHREAD_CFLAGS_OTHER}
-	${GEE_CFLAGS} ${GEE_CFLAGS_OTHER}
-	${JSON-GLIB} ${JSON-GLIB_CFLAGS_OTHER}
-	${LIBPEAS_CFLAGS} ${LIBPEAS_CFLAGS_OTHER}
-	${LIBNOTIFY_CFLAGS} ${LIBNOTIFY_CFLAGS_OTHER}
-	${GNUTLS_CFLAGS} ${GNUTLS_CFLAGS_OTHER}
-	${OPENSSL_CFLAGS} ${OPENSSL_CFLAGS_OTHER}
+add_definitions(
+    ${REQ_DEPS_CFLAGS} ${REQ_DEPS_CFLAGS_OTHER}
+    ${OPT_DEPS_CFLAGS} ${OPT_DEPS_CFLAGS_OTHER}
 )
-add_definitions(${DEPS_CFLAGS})
 
-set(DEPS_LIBS
-	${GOBJECT_LIBRARIES}
-	${GIO_LIBRARIES}
-	${GTHREAD_LIBRARIES}
-	${GEE_LIBRARIES}
-	${JSON-GLIB_LIBRARIES}
-	${LIBPEAS_LIBRARIES}
-	${LIBNOTIFY_LIBRARIES}
-	${GNUTLS_LIBRARIES}
-	${OPENSSL_LIBRARIES}
-)
-link_libraries(${DEPS_LIBS})
+link_libraries(
+    ${REQ_DEPS_LIBRARIES}
+    ${OPT_DEPS_LIBRARIES})
 
-set(DEPS_LIB_PATHS
-	${GOBJECT_LIBRARY_DIRS}
-	${GIO_LIBRARY_DIRS}
-	${GTHREAD_LIBRARY_DIRS}
-	${GEE_LIBRARY_DIRS}
-	${JSON-GLIB_LIBRARY_DIRS}
-	${LIBPEAS_LIBRARY_DIRS}
-	${LIBNOTIFY_LIBRARY_DIRS}
-	${GNUTLS_LIBRARY_DIRS}
-	${OPENSSL_LIBRARY_DIRS}
-)
-link_directories(${DESP_LIB_PATHS})
+link_directories(
+    ${REQ_DEPS_LIBRARY_DIRS}
+    ${OPT_DEPS_LIBRARY_DIRS})
 
 # If someone doesn't specify a build type, default to "Debug"
 if(CMAKE_BUILD_TYPE STREQUAL "")
   set(CMAKE_BUILD_TYPE "Debug")
 endif(CMAKE_BUILD_TYPE STREQUAL "")
 
+if (CMAKE_BUILD_TYPE MATCHES "Debug")
+    message(STATUS "Build of debug type")
+endif (CMAKE_BUILD_TYPE MATCHES "Debug")
+
+
 list(APPEND VALA_COMPILER_FLAGS "--target-glib=2.38")
 list(APPEND VALA_COMPILER_FLAGS_DEBUG "--debug")
 #list(APPEND VALA_COMPILER_FLAGS_DEBUG "--enable-mem-profiler")
 list(APPEND VALA_COMPILER_FLAGS_DEBUG "--enable-checking")
+list(APPEND VALA_COMPILER_FLAGS_DEBUG "--define=DEBUG_BUILD")
 
 # Lots of perfectly valid Vala code will trigger warnings from the C
 # compiler, almost always false-positives.  This often drowns out
@@ -193,7 +156,15 @@ set(GCONNECT_PKG_NAME ${PROJECT_NAME}-${GCONNECT_VERSION_API})
 set(GCONNECT_GIR_NAME "Gconnect-${GCONNECT_VERSION_API}")
 
 # The path where libraries files should be searched for
-set (LIBRARY_PATH "lib")
+set(LIBRARY_PATH "lib")
+
+# The subdir where plugin files should be installed
+set(GCONNECT_PLUGIN_SUBDIR "${PROJECT_NAME}/plugins/")
+
+# The subdir where plugin files should be installed
+set(GCONNECT_CUSTOM_VAPIS "${CMAKE_SOURCE_DIR}/vapis")
+
+include(CompilePlugin)
 
 #add_subdirectory(lib/crypt)
 add_subdirectory(lib)
@@ -202,3 +173,4 @@ add_subdirectory(daemon)
 #add_subdirectory(gui)
 #add_subdirectory(tests)
 add_subdirectory(po)
+add_subdirectory(plugins)

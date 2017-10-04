@@ -2,6 +2,7 @@ namespace Gconnect.Config {
     public const string BUILD_VERSION = "@GCONNECT_VERSION_MAJOR@.@GCONNECT_VERSION_MINOR@.@GCONNECT_VERSION_REVISION@";
     public const string PACKAGE_SUFFIX = "@GCONNECT_VERSION_API@";
     public const string APP_NAME = "@PROJECT_NAME@";
+    public const string PLUGINS_DIR = "@CMAKE_INSTALL_FULL_DATADIR@/@GCONNECT_PLUGIN_SUBDIR@";
 
     public string parse_dbus_path (string path) {
         // TODO: replace characters that are not allowed as a dbus or GSettings path
@@ -17,7 +18,6 @@ namespace Gconnect.Config {
         private string _device_category = "desktop";
      
         internal Mconn.Crypt crypt_openssl { get; private set; default = null; }
-        internal Crypt.Crypt crypt_gnutls { get; private set; default = null; }
         public TlsCertificate certificate { get; private set; default = null; }
         
         public string device_name {get; set;}
@@ -205,7 +205,7 @@ namespace Gconnect.Config {
         }
 
         public static string get_plugins_global_dir() {
-            return Path.build_filename("@CMAKE_INSTALL_FULL_DATADIR@", "@PROJECT_NAME@/plugins");
+            return Path.build_filename(PLUGINS_DIR);
         }
 
         private static void init_user_dirs() {
@@ -240,18 +240,58 @@ namespace Gconnect.Config {
         
         private void init_crypto() {
             string key_path = get_private_key_path();
-            string cert_path = get_certificate_path();
-            // Check uuid size
-            if (device_id.length != 36) {
-                error("The UUID has not the correct size (63), certificate cannot be generated: %d", device_id.length);
+            string crt_path = get_certificate_path();
+            
+            bool res = true;
+            int res2 = 0;
+            GLib.File file = null;
+            
+            file = File.new_for_path(key_path);
+            if (!file.query_exists() || file.query_file_type(0) != FileType.REGULAR) {
+                debug("Create a new private key");
+                var new_key = GnuTLS.X509.PrivateKey.create();
+                new_key.generate(GnuTLS.PKAlgorithm.RSA, 2048);
+                res = Crypt.export_private_key_to_pem_file(new_key, key_path);
+                if (!res) {
+                    error("Could not generate the private key, aborting.");
+                }
             }
-            GLib.Environment.set_variable("G_TLS_GNUTLS_PRIORITY", "NONE:+VERS-TLS1.0:+MAC-ALL:+ECDHE-ECDSA:+ECDHE-RSA:+AES-256-GCM:+AES-128-GCM:+AES-128-CBC:+ARCFOUR-128:+RSA:+SHA1:+SIGN-ALL:+COMP-NULL:+CURVE-ALL:+CTYPE-ALL", true); 
-            crypt_gnutls = new Crypt.Crypt(key_path, cert_path, device_id);
-//            crypt_openssl = new Mconn.Crypt.for_paths(key_path, cert_path);
+            
+            file = File.new_for_path(crt_path);
+            if (!file.query_exists() || file.query_file_type(0) != FileType.REGULAR) {
+                debug("Create a new self-signed certificate");
+                GnuTLS.X509.PrivateKey priv_key = Crypt.import_private_key_from_pem_file(key_path);
+                var new_crt = Crypt.certificate_create(priv_key, 2);  // Serial number 2
+
+                var now = new DateTime.now_utc();
+                res2 = new_crt.set_activation_time ((time_t)now.to_unix());
+                res2 = new_crt.set_expiration_time ((time_t)now.add_years(10).to_unix());
+                
+                new_crt.set_dn_by_oid(GnuTLS.X509.OID_X520_COMMON_NAME, 0, device_id);
+                new_crt.set_dn_by_oid(GnuTLS.X509.OID_X520_ORGANIZATION_NAME, 0, "KDE");
+                new_crt.set_dn_by_oid(GnuTLS.X509.OID_X520_ORGANIZATIONAL_UNIT_NAME, 0, "KDE Connect");
+                
+
+                res2 = new_crt.set_key_purpose_oid(GnuTLS.X509.KP_TLS_WWW_CLIENT, false);
+                res2 = new_crt.set_key_purpose_oid(GnuTLS.X509.KP_TLS_WWW_SERVER, false);
+                res2 = new_crt.set_basic_constraints(1, -1); // CA authority
+
+                // Sign certificate
+                res2 = new_crt.sign2(new_crt, priv_key, GnuTLS.DigestAlgorithm.SHA256, 0);
+                
+                res = Crypt.export_certificate_to_pem_file(new_crt, crt_path);
+                if (!res) {
+                    error("Could not generate the certificate, aborting.");
+                }
+            }
+
+//            crypt_openssl = new Mconn.Crypt.for_paths(key_path, crt_path);
+
             // TODO: use GnuTls generated certificate:
             // certtool --generate-privkey --bits 2048 --outfile private.pem
             // certtool --generate-self-signed --load-privkey private.pem --template template.cfg --outfile certificate.pem --hash SHA256 -q
-            certificate = new TlsCertificate.from_files(get_certificate_path(), get_private_key_path());
+//            GLib.Environment.set_variable("G_TLS_GNUTLS_PRIORITY", "NONE:+VERS-TLS1.0:+MAC-ALL:+ECDHE-ECDSA:+ECDHE-RSA:+AES-256-GCM:+AES-128-GCM:+AES-128-CBC:+ARCFOUR-128:+RSA:+SHA1:+SIGN-ALL:+COMP-NULL:+CURVE-ALL:+CTYPE-ALL", true); 
+            certificate = new TlsCertificate.from_files(crt_path, key_path);
             GLib.info("Certificate loaded from pem file.");
         }
     }
