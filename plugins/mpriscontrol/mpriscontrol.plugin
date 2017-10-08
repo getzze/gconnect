@@ -1,0 +1,8 @@
+[Plugin]
+Module=mpriscontrol
+Loader=python3
+Name=MprisControl
+Description=Remote control your music and videos
+X-Outgoing-Capabilities=kdeconnect.mpris
+X-Incoming-Capabilities=kdeconnect.mpris.request
+
