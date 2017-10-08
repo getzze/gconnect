@@ -198,7 +198,7 @@ namespace Gconnect.LanConnection {
                 string sent = input.serialize() + "\n";
                 send_async(this.dos, sent);
             } catch (IOError e) {
-                warning("Error receiving packet: %s", e.message);
+                warning("Error sending packet: %s", e.message);
                 this.close();
                 return false;
             }
@@ -267,12 +267,14 @@ namespace Gconnect.LanConnection {
                 
             NetworkProtocol.Packet pkt = null;
             if (raw_pkt.packet_type == NetworkProtocol.PACKET_TYPE_ENCRYPTED) {
-                try {
-                    pkt = raw_pkt.decrypt();
-                } catch (NetworkProtocol.PacketError e) {
-                    debug("Error with encrypted pakcet: %s", e.message);
-                    pkt = raw_pkt;
-                }
+                warning("This is an old protocol, it is not supported anymore, use TLS.");
+                return;
+//                try {
+//                    pkt = raw_pkt.decrypt();
+//                } catch (NetworkProtocol.PacketError e) {
+//                    debug("Error with encrypted pakcet: %s", e.message);
+//                    pkt = raw_pkt;
+//                }
             } else {
                 pkt = raw_pkt;
             }

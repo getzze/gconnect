@@ -33,11 +33,19 @@ set(GCONNECT_VALA_SOURCES
 ## Add Lan provider
 list(APPEND VALA_COMPILER_FLAGS "--define=GCONNECT_LAN")
 list(APPEND GCONNECT_VALA_SOURCES 
-    #channels/lan/lanpairinghandler.vala
     channels/lan/lanlinkprovider.vala
     channels/lan/landevicelink.vala
     channels/lan/lanconfig.vala
 )
+
+## Add custom vapi
+list(APPEND GCONNECT_VALA_SOURCES 
+    crypt/crypt.c
+    crypt/crypt.vapi
+    ${GCONNECT_CUSTOM_VAPIS}/gnutls.vapi
+    ${GCONNECT_CUSTOM_VAPIS}/uuid.vapi
+)
+
 
 
 # Any dependencies.  Note that it isn't actually necessary to add
@@ -60,12 +68,6 @@ vala_precompile_target(
     GIR "${GCONNECT_GIR_NAME}.gir"
     LIBRARY "${GCONNECT_LIBRARY_NAME}"
     HEADER "${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.h"
-    crypt/mconn-crypt.c
-    crypt/mconn-crypt.vapi
-    crypt/crypt.c
-    crypt/crypt.vapi
-    ${GCONNECT_CUSTOM_VAPIS}/gnutls.vapi
-    ${GCONNECT_CUSTOM_VAPIS}/uuid.vapi
     ${GCONNECT_VALA_SOURCES})
 
 ## Uncomment if external dependencies are required
@@ -172,10 +174,6 @@ install (TARGETS ${GCONNECT_LIBRARY_NAME}
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.h
     DESTINATION ${CMAKE_INSTALL_FULL_INCLUDEDIR})
 
-# Install our VAPI
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.vapi
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/vala/vapi)
-
 # Generate and install a pkg-config file
 configure_file (
     "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.pc.in"
@@ -184,23 +182,25 @@ configure_file (
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${GCONNECT_PKG_NAME}.pc
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
-# Generate documentation
-find_package(Valadoc)
-if(${VALADOC_FOUND})
-    valadoc_generate(html
-        PACKAGE_NAME ${GCONNECT_PKG_NAME}
-        PACKAGE_VERSION "${GCONNECT_VERSION_MAJOR}.${GCONNECT_VERSION_MINOR}.${GCONNECT_VERSION_REVISION}"
-        SOURCES ${GCONNECT_VALA_SOURCES}
-        PACKAGES ${GCONNECT_VALA_PACKAGES})
-    valadoc_generate(devhelp
-        DOCLET devhelp
-        PACKAGE_NAME ${GCONNECT_PKG_NAME}
-        PACKAGE_VERSION "${GCONNECT_VERSION_MAJOR}.${GCONNECT_VERSION_MINOR}.${GCONNECT_VERSION_REVISION}"
-        SOURCES ${GCONNECT_VALA_SOURCES}
-        PACKAGES ${GCONNECT_VALA_PACKAGES})
+if (BUILD_DOC)
+    # Generate documentation
+    find_package(Valadoc)
+    if(${VALADOC_FOUND})
+        valadoc_generate(html
+            PACKAGE_NAME ${GCONNECT_PKG_NAME}
+            PACKAGE_VERSION "${GCONNECT_VERSION_MAJOR}.${GCONNECT_VERSION_MINOR}.${GCONNECT_VERSION_REVISION}"
+            SOURCES ${GCONNECT_VALA_SOURCES}
+            PACKAGES ${GCONNECT_VALA_PACKAGES})
+        valadoc_generate(devhelp
+            DOCLET devhelp
+            PACKAGE_NAME ${GCONNECT_PKG_NAME}
+            PACKAGE_VERSION "${GCONNECT_VERSION_MAJOR}.${GCONNECT_VERSION_MINOR}.${GCONNECT_VERSION_REVISION}"
+            SOURCES ${GCONNECT_VALA_SOURCES}
+            PACKAGES ${GCONNECT_VALA_PACKAGES})
 
-    install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/devhelp/${GCONNECT_PKG_NAME}"
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/devhelp/books")
-    add_custom_target(doc ALL
-        DEPENDS html devhelp)
-endif()
+        install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/devhelp/${GCONNECT_PKG_NAME}"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/devhelp/books")
+        add_custom_target(doc ALL
+            DEPENDS html devhelp)
+    endif()
+endif (BUILD_DOC)

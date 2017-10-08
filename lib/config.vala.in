@@ -1,3 +1,5 @@
+using GnuTLS;
+
 namespace Gconnect.Config {
     public const string BUILD_VERSION = "@GCONNECT_VERSION_MAJOR@.@GCONNECT_VERSION_MINOR@.@GCONNECT_VERSION_REVISION@";
     public const string PACKAGE_SUFFIX = "@GCONNECT_VERSION_API@";
@@ -17,7 +19,7 @@ namespace Gconnect.Config {
         private Gee.HashMap<string, GLib.Settings> devices_settings;
         private string _device_category = "desktop";
      
-        internal Mconn.Crypt crypt_openssl { get; private set; default = null; }
+//        internal Mconn.Crypt crypt_openssl { get; private set; default = null; }
         public TlsCertificate certificate { get; private set; default = null; }
         
         public string device_name {get; set;}
@@ -222,19 +224,18 @@ namespace Gconnect.Config {
         }
         
         public string get_public_key_pem() {
-//            var str = "-----BEGIN PUBLIC KEY-----\n\n-----END PUBLIC KEY-----\n";
             var str = "";
-            if (crypt_openssl != null) {
-                str = crypt_openssl.get_public_key_pem();
-            }
+//            if (crypt_openssl != null) {
+//                str = crypt_openssl.get_public_key_pem();
+//            }
             return str;
         }
         
         public ByteArray decrypt(Bytes chars) {
             ByteArray ret = null;
-            if (crypt_openssl != null) {
-                ret = crypt_openssl.decrypt(chars);
-            }
+//            if (crypt_openssl != null) {
+//                ret = crypt_openssl.decrypt(chars);
+//            }
             return ret;
         }
         
@@ -285,9 +286,7 @@ namespace Gconnect.Config {
                 }
             }
 
-//            crypt_openssl = new Mconn.Crypt.for_paths(key_path, crt_path);
-
-            // TODO: use GnuTls generated certificate:
+            // For testing, use certtool to generate a GnuTls certificate:
             // certtool --generate-privkey --bits 2048 --outfile private.pem
             // certtool --generate-self-signed --load-privkey private.pem --template template.cfg --outfile certificate.pem --hash SHA256 -q
 //            GLib.Environment.set_variable("G_TLS_GNUTLS_PRIORITY", "NONE:+VERS-TLS1.0:+MAC-ALL:+ECDHE-ECDSA:+ECDHE-RSA:+AES-256-GCM:+AES-128-GCM:+AES-128-CBC:+ARCFOUR-128:+RSA:+SHA1:+SIGN-ALL:+COMP-NULL:+CURVE-ALL:+CTYPE-ALL", true); 

@@ -20,14 +20,6 @@ def dict_to_packet(head: str, d: dict) -> Gconnect.NetworkProtocolPacket:
     pkt = Gconnect.NetworkProtocolPacket.with_string_body(head, s)
     return pkt
 
-#def packet_to_dict(pkt) -> dict:
-    #return json.loads(pkt.serialize())["body"]
-
-#def dict_to_packet(head: str, d: dict):
-    #s = json.dumps(d)
-    #pkt=""
-    #return pkt
-
 def prepare_logger(name):
     logger = logging.getLogger("gconnect.plugin.{}".format(name))
     logger.setLevel(logging.DEBUG)

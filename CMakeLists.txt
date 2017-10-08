@@ -111,6 +111,7 @@ if (CMAKE_BUILD_TYPE MATCHES "Debug")
     message(STATUS "Build of debug type")
 endif (CMAKE_BUILD_TYPE MATCHES "Debug")
 
+option(BUILD_DOC "Build documentation" OFF)
 
 list(APPEND VALA_COMPILER_FLAGS "--target-glib=2.38")
 list(APPEND VALA_COMPILER_FLAGS_DEBUG "--debug")

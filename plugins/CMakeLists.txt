@@ -28,6 +28,7 @@ set(GCONNECT_PLUGIN_LIST
     mousepad
     findmyphone
     runcommand
+    mpriscontrol
 )
 
 
