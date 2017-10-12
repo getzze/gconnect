@@ -8,7 +8,7 @@ Plugins can be written in Vala, C Python or Lua using [libpeas](https://github.c
 ## Dependencies:
 
 - vala
-- cmake
+- meson
 - glib2
 - gobject-introspection
 - libgee
@@ -25,8 +25,8 @@ For the plugins:
 To build gconnect:
 
     mkdir build && cd $_
-    cmake ..
-    make && make install
+    meson ..
+    ninja && sudo ninja install
 
 ## Project structure
 
@@ -37,6 +37,5 @@ Thanks to its developers for simplifying all this boring and complex work.
 
 This project uses a few pieces of other projects, thanks to:
 
-- [Vala project template](https://github.com/flplv/vala-cmake-example) CMake template.
 - [KDEConnect](https://github.com/KDE/kdeconnect-kde) for the protocol.
 - [mconnect](https://github.com/bboozzoo/mconnect) other implementation in Vala of the kdeconnect protocol.
