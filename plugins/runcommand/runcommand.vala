@@ -31,7 +31,7 @@ namespace PluginsGconnect.RunCommand {
 
     public class RunCommandProxy : SimpleProxy {
         protected const string PACKET_TYPE_RUNCOMMAND = "kdeconnect.runcommand";
-        private const string GSETTING_ID = "org.gconnect.plugin.runcommand";
+        private const string GSETTING_ID = "org.gconnect.plugins.runcommand";
         
         private GLib.Settings settings;
         private bool threaded = false;
@@ -126,7 +126,7 @@ namespace PluginsGconnect.RunCommand {
 
         private void exec_command_thread(string cmd) {
             try {
-                var thread = new Thread<int>.try("cmd", () => {
+                new Thread<int>.try("cmd", () => {
                     string cmd_stdout;
                     string cmd_stderr;
                     int cmd_status;

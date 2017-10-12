@@ -180,12 +180,23 @@ namespace Gconnect.LanConnection {
             }
         }
 
+        private bool send_sync(OutputStream output, string sent) throws Error {
+            size_t len;
+            bool res = output.write_all(sent.data, out len, cancel_link);
+#if DEBUG_BUILD
+            // Should not log the content of every packet sent in normal condition
+            debug("LanDeviceLink, packet sent: %s", sent);
+#endif
+            return res;
+        }
+        
+        // TODO: needs to properly manage a queue to make it work
         private async void send_async(OutputStream output, string sent) throws Error {
             size_t len;
             yield output.write_all_async(sent.data, Priority.DEFAULT_IDLE, cancel_link, out len);
 #if DEBUG_BUILD
             // Should not log the content of every packet sent in normal condition
-            debug("LanDeviceLink, packet sent: %s", sent);
+            debug("LanDeviceLink, packet sent async: %s", sent);
 #endif
         }
         
@@ -196,7 +207,8 @@ namespace Gconnect.LanConnection {
 
             try {
                 string sent = input.serialize() + "\n";
-                send_async(this.dos, sent);
+                bool res = send_sync(this.dos, sent);
+                return res;
             } catch (IOError e) {
                 warning("Error sending packet: %s", e.message);
                 this.close();

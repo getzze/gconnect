@@ -32,7 +32,7 @@ namespace PluginsGconnect.RemoteKeyboard {
         public abstract void unpublish();
     }
 
-    [DBus(name = "org.gconnect.plugin.remotekeyboard")]
+    [DBus(name = "org.gconnect.plugins.remotekeyboard")]
     public class RemoteKeyboardProxy : SimpleProxy {
         private const string PACKET_TYPE_REQUEST = "kdeconnect.mousepad.request";
         private const string PACKET_TYPE_ECHO = "kdeconnect.mousepad.echo";

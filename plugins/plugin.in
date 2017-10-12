@@ -1,0 +1,7 @@
+[Plugin]
+Module=@file@
+Name=@name@
+Description=@desc@
+X-Outgoing-Capabilities=@outcap@
+X-Incoming-Capabilities=@incap@
+@loader@

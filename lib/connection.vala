@@ -192,7 +192,7 @@ namespace Gconnect.Connection {
         
         public bool request_pairing() {
             if (this.status == InternalPairStatus.PAIRED) {
-                pairing_error("%s: Already paired".printf(this.device_link.name));
+                pairing_error(_("Already paired") + ": %s".printf(this.device_link.name));
                 return false;
             }
             if (this.status == InternalPairStatus.REQUESTED_BY_PEER) {

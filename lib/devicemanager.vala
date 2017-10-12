@@ -293,6 +293,7 @@ namespace Gconnect.DeviceManager {
                 requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY)
                 requires (is_paired())
         {
+            // TODO: create a queue to send packet, otherwise, some packets are lost
             if (pkt.packet_type in info.incoming) {
                 foreach (var dl in device_links) {
                     if (dl.send_packet(pkt)) { return true;}

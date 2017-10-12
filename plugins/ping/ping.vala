@@ -2,7 +2,8 @@ using GLib;
 using Peas;
 using Gconnect;
 
-namespace PluginsGconnect.Findmyphone {
+
+namespace PluginsGconnect.Ping {
     
     public abstract class SimpleProxy : GLib.Object {
         protected unowned Gconnect.Plugin.PluginProxy proxy;
@@ -29,20 +30,37 @@ namespace PluginsGconnect.Findmyphone {
         public abstract void unpublish();
     }
 
-    [DBus(name = "org.gconnect.plugins.findmyphone")]
-    public class FindmyphoneProxy : SimpleProxy {
-        protected const string PACKET_TYPE_REQUEST = "kdeconnect.findmyphone.request";
-
-        public FindmyphoneProxy(Gconnect.Plugin.PluginProxy proxy) {
+    [DBus(name = "org.gconnect.plugins.ping")]
+    public class PingProxy : SimpleProxy {
+        protected const string PACKET_TYPE_REQUEST = "kdeconnect.ping";
+        
+        public PingProxy(Gconnect.Plugin.PluginProxy proxy) {
             base(proxy);
+            Notify.init("gconnect");
         }
 
-        public void ring() {
+        protected override void receive(Gconnect.NetworkProtocol.Packet pkt) {
+            var title = this.proxy.device_name;
+            var mess = pkt.has_field("message") ? pkt.get_string("message") : "Ping!";
+
+            var notification = new Notify.Notification (title, mess, "dialog-information");
+            try {
+                notification.show();
+            } catch (Error e) {
+                debug("Cannot display notfication: %s", e.message);
+            }
+        }
+        
+        public void send_ping() {
             var pkt = new Gconnect.NetworkProtocol.Packet(PACKET_TYPE_REQUEST);
             this.proxy.request(pkt);
         }
-        
-        protected override void receive(Gconnect.NetworkProtocol.Packet pkt) {}
+
+        public void send_message(string mess) {
+            var pkt = new Gconnect.NetworkProtocol.Packet(PACKET_TYPE_REQUEST);
+            pkt.set_string("message", mess);
+            this.proxy.request(pkt);
+        }
 
         protected override void publish() {
             this.proxy.register(publish_dbus);
@@ -64,13 +82,13 @@ namespace PluginsGconnect.Findmyphone {
         }
     }
 
-    public class Findmyphone : GLib.Object, Gconnect.Plugin.Plugin {
+    public class Ping : GLib.Object, Gconnect.Plugin.Plugin {
         public unowned Gconnect.DeviceManager.Device device { get; construct set; }
-        private FindmyphoneProxy worker = null;
+        private PingProxy worker = null;
 
         /* The "constructor" with the plugin name as argument */
         public void activate(string name) {
-            this.worker = new FindmyphoneProxy(this.device.get_plugin(name));
+            this.worker = new PingProxy(this.device.get_plugin(name));
         }
         
         public void deactivate() {
@@ -87,5 +105,5 @@ namespace PluginsGconnect.Findmyphone {
 public void peas_register_types (TypeModule module) {
         var objmodule = module as Peas.ObjectModule;
 
-        objmodule.register_extension_type(typeof (Gconnect.Plugin.Plugin), typeof (PluginsGconnect.Findmyphone.Findmyphone));
+        objmodule.register_extension_type(typeof (Gconnect.Plugin.Plugin), typeof (PluginsGconnect.Ping.Ping));
 }

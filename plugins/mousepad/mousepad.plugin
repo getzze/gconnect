@@ -1,6 +1,0 @@
-[Plugin]
-Module=libmousepad.so
-Name=Mousepad
-Description=Use your phone as a touchpad and keyboard
-X-Outgoing-Capabilities=
-X-Incoming-Capabilities=kdeconnect.mousepad.request

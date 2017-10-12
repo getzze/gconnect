@@ -1,6 +1,0 @@
-[Plugin]
-Module=findmyphone
-Name=Findmyphone
-Description=Find your lost phone by making it play an alarm sound
-X-Outgoing-Capabilities=kdeconnect.findmyphone.request
-X-Incoming-Capabilities=

@@ -1,0 +1,7 @@
+[Plugin]
+Module=input
+Name=Input
+Loader=python3
+Description=Use your phone as a touchpad and keyboard (like mousepad)
+X-Outgoing-Capabilities=
+X-Incoming-Capabilities=kdeconnect.mousepad.request

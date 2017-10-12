@@ -336,7 +336,7 @@ namespace Gconnect.NetworkProtocol {
         public void set_strv(string field, string[] @value) {
             var arr = new Json.Array();
             foreach (var s in @value) {
-                arr.add_string_element(s);
+                arr.add_string_element(s.dup());
             }
             this.body.set_array_member(field, (owned)arr);
         }

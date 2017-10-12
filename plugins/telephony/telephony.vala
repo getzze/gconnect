@@ -31,7 +31,7 @@ namespace PluginsGconnect.Telephony {
         public abstract void unpublish();
     }
 
-    [DBus(name = "org.gconnect.plugin.telephony")]
+    [DBus(name = "org.gconnect.plugins.telephony")]
     public class TelephonyProxy : SimpleProxy {
         protected const string PACKET_TYPE_TELEPHONY_REQUEST = "kdeconnect.telephony.request";
         protected const string PACKET_TYPE_SMS_REQUEST = "kdeconnect.sms.request";

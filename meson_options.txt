@@ -1,0 +1,5 @@
+option('test', type : 'boolean', value : false)
+option('documentation', type : 'boolean', value : false)
+option('gconnect_lan', type : 'boolean', value : true)
+option('gconnect_bluetooth', type : 'boolean', value : false)
+

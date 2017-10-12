@@ -1,5 +1,5 @@
 <schemalist>
-  <schema id="org.gconnect.plugin.runcommand" path="/apps/gconnect/plugin/runcommand/" gettext-domain="gconnect">
+  <schema id="org.gconnect.plugins.runcommand" path="/apps/gconnect/plugins/runcommand/" gettext-domain="gconnect">
 
     <key name="commands" type="a{ss}">
       <default>{}</default>

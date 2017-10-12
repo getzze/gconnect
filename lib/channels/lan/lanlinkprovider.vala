@@ -155,18 +155,8 @@ namespace Gconnect.LanConnection {
             } catch (Error e) {
                 warning("Could not realize handshake with %s: %s", device_id, e.message);
             }
-//            warning("Certificate:\n%s", cert.certificate_pem);
-            
-//            // Setting supported ciphers manually
-//            // Top 3 ciphers are for new Android devices, botton two are for old Android devices
-//            // FIXME : These cipher suites should be checked whether they are supported or not on device
-//            QList<QSslCipher> socketCiphers;
-//            socketCiphers.append(QSslCipher(QStringLiteral("ECDHE-ECDSA-AES256-GCM-SHA384")));
-//            socketCiphers.append(QSslCipher(QStringLiteral("ECDHE-ECDSA-AES128-GCM-SHA256")));
-//            socketCiphers.append(QSslCipher(QStringLiteral("ECDHE-RSA-AES128-SHA")));
-//            socketCiphers.append(QSslCipher(QStringLiteral("RC4-SHA")));
-//            socketCiphers.append(QSslCipher(QStringLiteral("RC4-MD5")));
 
+            // TODO: check certificate
 //            // Configure for ssl
 //            QSslConfiguration sslConfig;
 //            sslConfig.setCiphers(socketCiphers);
@@ -186,29 +176,18 @@ namespace Gconnect.LanConnection {
 //                socket->setPeerVerifyMode(QSslSocket::QueryPeer);
 //            }
 
-//            //Usually SSL errors are only bad for trusted devices. Uncomment this section to log errors in any case, for debugging.
-//            //QObject::connect(socket, static_cast<void (QSslSocket::*)(const QList<QSslError>&)>(&QSslSocket::sslErrors), [](const QList<QSslError>& errors)
-//            //{
-//            //    Q_FOREACH (const QSslError &error, errors) {
-//            //        qCDebug(KDECONNECT_CORE) << "SSL Error:" << error.errorString();
-//            //    }
-//            //});
         }
         
         public static void configure_socket(Socket sock) throws Error {
-            //Posix.IPProto.TCP = 6
-            //Posix.TCP_KEEPIDLE = 4
-            //Posix.TCP_KEEPINTVL = 5
-            //Posix.TCP_KEEPCNT = 6
             // time to start sending keepalive packets (seconds)
             int max_idle = 10;
-            sock.set_option(6, 4, max_idle);
+            sock.set_option(Posix.IPProto.TCP, Posix.TCP_KEEPIDLE, max_idle);
             // interval between keepalive packets after the initial period (seconds)
             int interval = 5;
-            sock.set_option(6, 5, interval);
+            sock.set_option(Posix.IPProto.TCP, Posix.TCP_KEEPINTVL, interval);
             // number of missed keepalive packets before disconnecting
             int count = 3;
-            sock.set_option(6, 6, count);
+            sock.set_option(Posix.IPProto.TCP, Posix.TCP_KEEPCNT, count);
 
             // enable keepalive
             sock.set_keepalive(true);
@@ -491,11 +470,6 @@ namespace Gconnect.LanConnection {
                 } catch (Error e) {
                     warning("Could not initiate the TLS connection: %s", e.message);
                 }
-//                connect(socket, &QSslSocket::encrypted, this, &LanLinkProvider::encrypted);
-//                if (is_device_paired) {
-//                    connect(socket, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrors(QList<QSslError>)));
-//                }
-//                socket->startClientEncryption();
 
             } else {
                 if (!myself_allow_encryption) {
@@ -526,7 +500,9 @@ namespace Gconnect.LanConnection {
                 (tls_conn as TlsClientConnection).set_certificate(cert);
             }
             tls_conn.set_require_close_notify(false);
-            tls_conn.accept_certificate.connect(accept_certificate_error);
+            tls_conn.accept_certificate.connect((s, cert, err) => {
+                return review_certificate(dev_id, s, cert, err);
+            });
 
             debug("Start handshake");
             bool res = yield tls_conn.handshake_async();
@@ -539,35 +515,14 @@ namespace Gconnect.LanConnection {
             }
         }
 
-        private bool accept_certificate_error(TlsConnection sender, TlsCertificate cert, TlsCertificateFlags errors) {
-//            debug("Accept certificate: %s", cert.certificate_pem);
-            debug("Accept peer certificate");
-            switch (errors) {
-            case TlsCertificateFlags.UNKNOWN_CA:
-                debug("TLS error: %s", TlsCertificateFlags.UNKNOWN_CA.to_string());
-                break;
-            case TlsCertificateFlags.BAD_IDENTITY:
-                debug("TLS error: %s", TlsCertificateFlags.BAD_IDENTITY.to_string());
-                break;
-            case TlsCertificateFlags.NOT_ACTIVATED:
-                debug("TLS error: %s", TlsCertificateFlags.NOT_ACTIVATED.to_string());
-                break;
-            case TlsCertificateFlags.EXPIRED:
-                debug("TLS error: %s", TlsCertificateFlags.EXPIRED.to_string());
-                break;
-            case TlsCertificateFlags.REVOKED:
-                debug("TLS error: %s", TlsCertificateFlags.REVOKED.to_string());
-                break;
-            case TlsCertificateFlags.INSECURE:
-                debug("TLS error: %s", TlsCertificateFlags.INSECURE.to_string());
-                break;
-            case TlsCertificateFlags.GENERIC_ERROR:
-                debug("TLS error: %s", TlsCertificateFlags.GENERIC_ERROR.to_string());
-                break;
-            case TlsCertificateFlags.VALIDATE_ALL:
-                debug("TLS error: %s", TlsCertificateFlags.VALIDATE_ALL.to_string());
-                break;
+        private bool review_certificate(string device_id, TlsConnection sender, TlsCertificate cert, TlsCertificateFlags errors) {
+            try {
+                Config.Config.instance().check_certificate(device_id, cert, errors);
+            } catch (TlsError e) {
+                warning("Received certificate do not correspond to paired device %s. Try unpairing and pairing again.\nError: %s", device_id, e.message);
+                return false;
             }
+            debug("Accept peer certificate");
             return true;
         }
         

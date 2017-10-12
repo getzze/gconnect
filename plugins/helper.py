@@ -77,7 +77,7 @@ class DbusProxy(SimpleProxy):
             self.proxy.connect("published", self.publish)
 
     def dbus_interface(self):
-        return "org.gconnect.plugin.{}".format(self.name)
+        return "org.gconnect.plugins.{}".format(self.name)
 
     def get_dbus_method(self, name):
         return "m_dbus_" + name

@@ -36,7 +36,7 @@
 
     <child name="providers" schema="org.gconnect.providers"/>
     <child name="devices" schema="org.gconnect.paired-devices"/>
-    <child name="plugin" schema="org.gconnect.plugin"/>
+    <child name="plugins" schema="org.gconnect.plugins"/>
 
   </schema>
   
@@ -49,7 +49,16 @@
 -->
   </schema>
 
-  <schema id="org.gconnect.plugin" path="/apps/gconnect/plugin/">
+  <schema id="org.gconnect.plugins" path="/apps/gconnect/plugins/">
+    <key name="plugins-dirs" type="as">
+      <default>[]</default>
+      <summary>List of directories to look for plugins</summary>
+      <description>
+        List of extra directories to look for plugins.
+        The installation path and the user configuration directory are automatically searched.
+      </description>
+    </key>
+
   </schema>
 
   <schema id="org.gconnect.device">

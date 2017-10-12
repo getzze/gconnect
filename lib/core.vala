@@ -24,7 +24,7 @@ using Gee;
 // using Config;
 
 namespace Gconnect.Core {
-    
+
     Core __instance = null;
 
     [Flags]

@@ -1,0 +1,15 @@
+/* Config
+ */
+
+namespace Gconnect.Config {
+    public const string GETTEXT_PACKAGE = @GETTEXT_PACKAGE@;
+    public const string PACKAGE_NAME = @PACKAGE_NAME@;
+    public const string PACKAGE_VERSION = @PACKAGE_VERSION@;
+    public const string PACKAGE_API_VERSION = @PACKAGE_API_VERSION@;
+    public const string VERSION = @VERSION@;
+    public const string PACKAGE_DATADIR = @PACKAGE_DATADIR@;
+    public const string PACKAGE_LOCALEDIR = @PACKAGE_LOCALEDIR@;
+    public const string PACKAGE_PLUGINSDIR = @PACKAGE_PLUGINSDIR@;
+    public const string SETTINGS_PATH = @SETTINGS_PATH@;
+    public const string SETTINGS_NAME = @SETTINGS_NAME@;
+}

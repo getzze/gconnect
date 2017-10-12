@@ -22,7 +22,6 @@ using Gee;
 // using Config;
 // using Connection;
 // using DeviceManager;
-// using Config;
 
 namespace Gconnect.Plugin {
     public interface Plugin : GLib.Object {
@@ -69,7 +68,7 @@ namespace Gconnect.Plugin {
             info("%s : %s", this.name, mess);
         }
         
-        public string dbus_path() { return this.device.dbus_path() + "/" + this.name;}
+        public string dbus_path() { return this.device.dbus_path() + "/" + this.name.down();}
         
         private bool is_packet_allowed(string type) {
             string delimiter = ",";
@@ -125,7 +124,7 @@ namespace Gconnect.Plugin {
             }
         }
         
-        public void unpublish() throws Error {
+        public void unpublish() {
             try	{
                 var conn = dbus_connection();
                 if (this.bus_id > 0 && !conn.unregister_object(this.bus_id)) {
@@ -184,11 +183,13 @@ namespace Gconnect.Plugin {
             private set {}
         }
 
+        [DBus (visible = false)]
         public string dbus_path() { return "/modules/gconnect/plugins/"; }
 
         [DBus (visible = false)]
         internal Peas.Engine engine { get; private set;}
 
+        [DBus (visible = false)]
         public PluginManager() {
             /* Get the default engine */
             this.engine = Peas.Engine.get_default();
@@ -219,6 +220,7 @@ namespace Gconnect.Plugin {
             };
         }
 
+        [DBus (visible = false)]
         public static PluginManager instance() {
             if (PluginManager._instance==null) {
                 var pm = new PluginManager();
@@ -233,11 +235,9 @@ namespace Gconnect.Plugin {
             /* Add generic plugin path */
             paths += Config.Config.get_plugins_local_dir();
             paths += Config.Config.get_plugins_global_dir();
-
-            /* Add current dir (comment if not debug) */
-            if (true) {
-                string current_path = Path.build_filename(Environment.get_current_dir(), "/plugins");
-                paths += current_path;
+            
+            foreach (var dir in Config.Config.instance().get_plugins_extra_dirs()) {
+                paths += dir;
             }
             return paths;
         }
