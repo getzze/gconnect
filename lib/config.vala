@@ -16,7 +16,6 @@ namespace Gconnect.Config {
         private string _device_category = "desktop";
         private string settings_name = SETTINGS_NAME;
      
-//        internal Mconn.Crypt crypt_openssl { get; private set; default = null; }
         public TlsCertificate certificate { get; private set; default = null; }
         
         public string device_name {get; set;}
@@ -248,22 +247,6 @@ namespace Gconnect.Config {
             return Path.build_filename(get_storage_dir(), "/certificate.pem");
         }
         
-        public string get_public_key_pem() {
-            var str = "";
-//            if (crypt_openssl != null) {
-//                str = crypt_openssl.get_public_key_pem();
-//            }
-            return str;
-        }
-        
-        public ByteArray decrypt(Bytes chars) {
-            ByteArray ret = null;
-//            if (crypt_openssl != null) {
-//                ret = crypt_openssl.decrypt(chars);
-//            }
-            return ret;
-        }
-        
         private void init_crypto() throws Error {
             string key_path = get_private_key_path();
             string crt_path = get_certificate_path();
@@ -284,45 +267,6 @@ namespace Gconnect.Config {
                         throw e;
                     }
             }
-
-//            file = File.new_for_path(key_path);
-//            if (!file.query_exists() || file.query_file_type(0) != FileType.REGULAR) {
-//                debug("Create a new private key");
-//                var new_key = GnuTLS.X509.PrivateKey.create();
-//                new_key.generate(GnuTLS.PKAlgorithm.RSA, 2048);
-//                res = Crypt.export_private_key_to_pem_file(new_key, key_path);
-//                if (!res) {
-//                    error("Could not generate the private key, aborting.");
-//                }
-//            }
-            
-//            file = File.new_for_path(crt_path);
-//            if (!file.query_exists() || file.query_file_type(0) != FileType.REGULAR) {
-//                debug("Create a new self-signed certificate");
-//                GnuTLS.X509.PrivateKey priv_key = Crypt.import_private_key_from_pem_file(key_path);
-//                var new_crt = Crypt.certificate_create(priv_key, 2);  // Serial number 2
-
-//                var now = new DateTime.now_utc();
-//                res2 = new_crt.set_activation_time ((time_t)now.to_unix());
-//                res2 = new_crt.set_expiration_time ((time_t)now.add_years(10).to_unix());
-                
-//                new_crt.set_string_dn_by_oid(GnuTLS.OID.X520_COMMON_NAME, 0, device_id);
-//                new_crt.set_string_dn_by_oid(GnuTLS.OID.X520_ORGANIZATION_NAME, 0, "KDE");
-//                new_crt.set_string_dn_by_oid(GnuTLS.OID.X520_ORGANIZATIONAL_UNIT_NAME, 0, "KDE Connect");
-                
-
-//                res2 = new_crt.set_key_purpose_oid(GnuTLS.KP.TLS_WWW_CLIENT, false);
-//                res2 = new_crt.set_key_purpose_oid(GnuTLS.KP.TLS_WWW_SERVER, false);
-//                res2 = new_crt.set_basic_constraints(1, -1); // CA authority
-
-//                // Sign certificate
-//                res2 = new_crt.sign2(new_crt, priv_key, GnuTLS.DigestAlgorithm.SHA256, 0);
-                
-//                res = Crypt.export_certificate_to_pem_file(new_crt, crt_path);
-//                if (!res) {
-//                    error("Could not generate the certificate, aborting.");
-//                }
-//            }
 
             // For testing, use certtool to generate a GnuTls certificate:
             // certtool --generate-privkey --bits 2048 --outfile private.pem

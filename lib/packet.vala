@@ -99,14 +99,9 @@ namespace Gconnect.NetworkProtocol {
             }
         }
         
-        public Packet.pair(bool pair = true, string? public_key = null) {
+        public Packet.pair(bool pair = true) {
             this(PACKET_TYPE_PAIR);
             this.set_bool("pair", pair);
-            if (pair) {
-                var config = Config.Config.instance();
-                public_key = public_key ?? config.get_public_key_pem();
-                this.set_string("publicKey", public_key);
-            }
         }
 
         public static Packet unserialize(string data) throws PacketError {
@@ -144,51 +139,6 @@ namespace Gconnect.NetworkProtocol {
             }
         }
         
-        public Packet? decrypt() throws PacketError {
-            /* Only for Protocol < 6
-             *  */
-            if (this.packet_type != PACKET_TYPE_ENCRYPTED || !has_field("data")) {
-                throw new PacketError.MALFORMED("Not an encrypted packet");
-            }
-            unowned Json.Array arr = get_array("data");
-            var config = Config.Config.instance();
-            bool failed = false;
-            var msgbytes = new ByteArray();
-            arr.foreach_element((a, i, node) => {
-                debug("node data: %s", node.get_string());
-                // encrypted data is base64 encoded
-                uchar[] data = Base64.decode(node.get_string());
-                var dbytes = new Bytes.take(data);
-                try {
-                    ByteArray decrypted = config.decrypt(dbytes);
-                    debug("data length: %zu", decrypted.data.length);
-                    msgbytes.append(decrypted.data);
-                } catch (Error e) {
-                    failed = true;
-                    return;
-                }
-            });
-            if (failed) {
-                throw new PacketError.MALFORMED("Decryption failed");
-            }
-
-            // data should be complete now
-            debug("total length of packet data: %zu", msgbytes.len);
-            // make sure there is \0 at the end
-            msgbytes.append({'\0'});
-            string decrypted_data = ((string)msgbytes.data).dup();
-            debug("decrypted data: %s", decrypted_data);
-
-            Packet dec_pkt = null;
-            try{
-                dec_pkt = Packet.unserialize(decrypted_data);
-            } catch (PacketError e){
-                throw e;
-            }
-            return dec_pkt;
-        }
-
-
         public bool has_payload() {
             return false;
         }

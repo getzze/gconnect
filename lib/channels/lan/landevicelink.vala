@@ -212,13 +212,8 @@ namespace Gconnect.LanConnection {
             } catch (IOError e) {
                 warning("Error sending packet: %s", e.message);
                 this.close();
-                return false;
             }
-
-            //Actually we can't detect if a package is received or not. We keep TCP
-            //"ESTABLISHED" connections that look legit (return true when we use them),
-            //but that are actually broken (until keepalive detects that they are down).
-            return true;
+            return false;
         }
         
         private async void monitor() {
@@ -271,24 +266,15 @@ namespace Gconnect.LanConnection {
             return (string) sb.data;
         }
 
-        private void packet_received(NetworkProtocol.Packet raw_pkt) {
-            if (raw_pkt.packet_type == NetworkProtocol.PACKET_TYPE_PAIR) {
-                this.incoming_pair_packet(raw_pkt);
+        private void packet_received(NetworkProtocol.Packet pkt) {
+            if (pkt.packet_type == NetworkProtocol.PACKET_TYPE_PAIR) {
+                this.incoming_pair_packet(pkt);
                 return;
             }
                 
-            NetworkProtocol.Packet pkt = null;
-            if (raw_pkt.packet_type == NetworkProtocol.PACKET_TYPE_ENCRYPTED) {
+            if (pkt.packet_type == NetworkProtocol.PACKET_TYPE_ENCRYPTED) {
                 warning("This is an old protocol, it is not supported anymore, use TLS.");
                 return;
-//                try {
-//                    pkt = raw_pkt.decrypt();
-//                } catch (NetworkProtocol.PacketError e) {
-//                    debug("Error with encrypted pakcet: %s", e.message);
-//                    pkt = raw_pkt;
-//                }
-            } else {
-                pkt = raw_pkt;
             }
 
 #if DEBUG_BUILD
