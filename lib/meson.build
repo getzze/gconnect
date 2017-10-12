@@ -29,8 +29,6 @@ vala_src = [
   'channels/loopback/loopbackconnection.vala',
   'core.vala',
   'crypt/certificate.vala',
-  'crypt/crypt.c',
-  'crypt/crypt.vapi',
 ]
 
 has_lan = get_option('gconnect_lan')
