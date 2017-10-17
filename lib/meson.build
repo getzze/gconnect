@@ -37,9 +37,26 @@ if has_lan
   vala_args += ['--define=GCONNECT_LAN']
   vala_src += [
     'channels/lan/lanlinkprovider.vala',
+    'channels/lan/lansocketconnection.vala',
     'channels/lan/landevicelink.vala',
     'channels/lan/lanconfig.vala',
   ]
+  install_data('channels/lan/gconnect.lan.gschema.xml', install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'))
+endif
+
+has_bluetooth = get_option('gconnect_bluetooth')
+if has_bluetooth
+  ## Add Bluetooth provider
+  lib_deps  += [dependency('gio-unix-2.0')]
+  vala_args += ['--define=GCONNECT_BLUETOOTH']
+  vala_src  += [
+    'channels/bluetooth/bluetoothlinkprovider.vala',
+    'channels/bluetooth/bluetoothsocketconnection.vala',
+    'channels/bluetooth/bluetoothdbus-iface.vala',
+    'channels/bluetooth/bluetoothdevicelink.vala',
+    'channels/bluetooth/bluetoothconfig.vala',
+  ]
+  install_data('channels/bluetooth/gconnect.bluetooth.gschema.xml', install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'))
 endif
 
 gconnect_lib = shared_library(package_name, vala_src,
@@ -63,7 +80,6 @@ gconnect_dep = declare_dependency(
 
 #GSettings
 install_data('gconnect.gschema.xml', install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'))
-install_data('channels/lan/gconnect.lan.gschema.xml', install_dir: join_paths(get_option('datadir'), 'glib-2.0', 'schemas'))
 meson.add_install_script(join_paths(meson_dir, 'meson_post_install.py'))
 
 ## Uncomment if external dependencies are required

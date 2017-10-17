@@ -47,11 +47,151 @@ namespace Gconnect.Connection {
         public abstract void on_network_change();
     }
     
+    public abstract class SocketConnectionLink: GLib.Object {
+        protected weak GLib.Socket socket;
+        protected GLib.IOStream stream;
+        protected uint source_id = 0;
+        protected GLib.Cancellable cancel_link;
+        
+        public signal void packet_received(NetworkProtocol.Packet pkt);
+        public signal void forced_close();
+        
+        public SocketConnectionLink() {
+            this.cancel_link = new GLib.Cancellable();
+            cancel_link.cancelled.connect((s)=> {
+                if (source_id > 0) {
+                    Source.remove(source_id);
+                    source_id = 0;
+                }
+            });
+        }
+        
+        ~SocketConnectionLink() {
+            try {
+                close();
+            } catch (GLib.Error e) {
+                debug("Could not close connection");
+            }
+        }
+
+        public bool is_closed() {
+            if (this.stream != null) {
+                return this.stream.is_closed();
+            }
+            return true;
+        }
+
+        public virtual void clean() {
+            cancel_link.cancel();
+            if (this.stream != null) {
+                try {
+                    if (!this.stream.is_closed()) { this.stream.close();}
+                } catch (IOError e) {
+                    debug("Error closing connection: %s\n", e.message);
+                }
+            }
+        }
+
+        public virtual void close() {
+            this.clean();
+            this.forced_close();
+        }
+
+        public void monitor() {
+            cancel_link.reset();
+
+            // Must use sync callback otherwise input_stream errors are thrown: "Stream has outstanding operation"
+            SocketSource source = this.socket.create_source(IOCondition.IN | IOCondition.ERR | IOCondition.HUP);
+            source.set_callback( (sock, cond) => {
+                if (sock.get_available_bytes() > 0 && cond == IOCondition.IN) {
+                    this.data_received_sync();
+                } else if (IOCondition.HUP in cond || IOCondition.ERR in cond) {
+                    this.close();
+                    return GLib.Source.REMOVE; // stop watching
+                }
+                return GLib.Source.CONTINUE; // continue watching
+            });
+            source_id = source.attach(MainContext.default());
+        }
+
+        public void unmonitor() {
+            cancel_link.cancel();
+        }
+
+        public bool send_packet(NetworkProtocol.Packet input) {
+            try {
+                string sent = input.serialize() + "\n";
+                bool res = this.write(sent);
+#if DEBUG_BUILD
+                // Should not log the content of every packet sent in normal condition
+                debug("Packet sent: %s", sent);
+#endif
+                return res;
+            } catch (IOError e) {
+                warning("Error sending packet: %s", e.message);
+                this.close();
+            }
+            return false;
+        }
+        
+        public bool write(string sent) throws IOError {
+            var output_stream = this.stream.get_output_stream();
+            size_t len;
+            // DataOutputStream cannot be used here because it takes ownership
+            // of the OutputStream and cannot release it afterwards.
+            bool res = output_stream.write_all(sent.data, out len, this.cancel_link);
+            if (res) {
+                res = output_stream.flush();
+            }
+            return res;
+        }
+
+        private void data_received_sync() {
+            string data = null;
+            try {
+                data = this.read_line();
+            } catch (Error e) {
+                warning("Error receiving packet: %s", e.message);
+                this.close();
+            }
+
+            if (data == null) {
+                return;
+            }
+            NetworkProtocol.Packet raw_pkt = null;
+            try {
+                raw_pkt = NetworkProtocol.Packet.unserialize(data);
+            } catch (NetworkProtocol.PacketError e) {
+                warning("Error unserializing json packet %s", data);
+                return;
+            }
+
+#if DEBUG_BUILD
+            // Should not log the content of every packet received in normal condition
+            debug("Packet received: %s", raw_pkt.to_string());
+#endif
+
+            packet_received(raw_pkt);
+        }
+        
+        public string? read_line () throws Error {
+            var input_stream = this.stream.get_input_stream();
+            var buffer = new uint8[1];
+            var sb = new StringBuilder ();
+            buffer[0] = '\0';
+            while (buffer[0] != '\n') {
+                input_stream.read (buffer, cancel_link);
+                sb.append_c ((char) buffer[0]);
+            }
+            return (string) sb.data;
+        }
+
+
+    }
 
     public abstract class DeviceLink : GLib.Object {
         protected weak LinkProvider _link_provider;
         protected PairStatus _pair_status;
-        protected GLib.Cancellable cancel_link;
 
         protected PairingHandler? pairing_handler = null;
 
@@ -77,7 +217,6 @@ namespace Gconnect.Connection {
             this.device_id = id;
             this._link_provider = parent;
             this._pair_status = PairStatus.NOT_PAIRED;
-            this.cancel_link = new GLib.Cancellable();
         }
         
         ~DeviceLink() {
@@ -102,9 +241,36 @@ namespace Gconnect.Connection {
         
         public abstract bool send_packet(NetworkProtocol.Packet pkt);
 
+        protected void create_pairing_handler() {
+            if (!this.has_pairing_handler()) {
+                this.pairing_handler = new PairingHandler(this);
+                this.pairing_handler.pairing_error.connect((s,m) => {this.pairing_error(m); });
+            }
+        }
+
+        protected void incoming_pair_packet(NetworkProtocol.Packet pkt) {
+            create_pairing_handler();
+            this.pairing_handler.packet_received(pkt);
+        }
+        
+        protected void request_pair() {
+            create_pairing_handler();
+            this.pairing_handler.request_pairing();
+        }
+        
+        protected void request_unpair() {
+            create_pairing_handler();
+            this.pairing_handler.unpair();
+        }
+
         //user actions
-        public abstract void user_requests_pair();
-        public abstract void user_requests_unpair();
+        public virtual void user_requests_pair() {
+            request_pair();
+        }
+
+        public virtual void user_requests_unpair() {
+            request_unpair();
+        }
 
         public virtual bool has_pairing_handler() {
             return (this.pairing_handler != null)?true:false;
@@ -118,13 +284,6 @@ namespace Gconnect.Connection {
             return false;
         }
 
-        public virtual void parse_device_info(ref DeviceManager.DeviceInfo dev) {}
-        
-//        public virtual DeviceLinkInfo get_info() {
-//            var ret = new DeviceLinkInfo();
-//            return ret;
-//        }
-        
         public virtual bool user_rejects_pair() {
             if (this.has_pairing_handler()) {
                 this.pairing_handler.reject_pairing();
@@ -132,6 +291,13 @@ namespace Gconnect.Connection {
             }
             return false;
         }
+
+        public virtual void parse_device_info(ref DeviceManager.DeviceInfo dev) {}
+        
+//        public virtual DeviceLinkInfo get_info() {
+//            var ret = new DeviceLinkInfo();
+//            return ret;
+//        }
         
         //The daemon will periodically destroy unpaired links if this returns false
         public virtual bool link_should_be_kept_alive() { return false;}

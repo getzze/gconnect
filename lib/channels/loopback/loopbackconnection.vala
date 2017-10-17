@@ -79,7 +79,6 @@ namespace Gconnect.LoopbackConnection {
 
             received_packet(output);
             return true;
-
         }
 
         //user actions

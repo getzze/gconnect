@@ -478,7 +478,7 @@ namespace Gconnect.LanConnection {
                 if (!others_allow_encryption) {
                     warning("%s is using an old protocol version, no encryption.", dev_id);
                 }
-                add_link(dev_id, conn.socket, conn, id, origin);
+//                add_link(dev_id, conn.socket, conn, id, origin);
             }
         }
 
@@ -527,15 +527,16 @@ namespace Gconnect.LanConnection {
         }
         
         // Private methods
-        private void add_link(string device_id, Socket sock, IOStream stream, 
+        private void add_link(string device_id, Socket sock, TlsConnection tls_conn, 
                                 NetworkProtocol.Packet pkt, ConnectionStarted origin) {
             debug("Add link to device: %s", device_id);
+            LanSocketConnection conn = new LanSocketConnection(sock, tls_conn, origin);
 
             if (links.has_key(device_id)) {
                 debug("device_link already existed, resetting it.");
-                links[device_id].reset(sock, stream, origin);
+                links[device_id].reset(conn);
             } else {
-                var new_dl = new LanDeviceLink(device_id, this, sock, stream, origin);
+                var new_dl = new LanDeviceLink(device_id, this, conn);
                 assert(new_dl != null);
                 debug("New device_link created");
                 new_dl.destroyed.connect(device_link_destroyed);

@@ -37,113 +37,62 @@ namespace Gconnect.LanConnection {
 
 
     public class LanDeviceLink : Connection.DeviceLink {
-        private weak Socket socket;
-        private TlsConnection tls_conn;
-        private IOStream stream;
-        private OutputStream dos;
-        private InputStream dis;
-        private uint source_id = 0;
-        private ConnectionStarted connection_source;
-        private InetSocketAddress host_address;
-        public bool TLS { get; set; default = false; }
-        public string peer_cert;
-
+        private LanSocketConnection socket_connection;
+        
         public override string name { get; protected set; default="LanLink";}
 
-        public LanDeviceLink(string device_id, Connection.LinkProvider parent, Socket sock, 
-                                IOStream stream, ConnectionStarted origin) {
+        public LanDeviceLink(string device_id, Connection.LinkProvider parent, LanSocketConnection conn) {
             base(device_id, parent);
-            cancel_link.cancelled.connect((s)=> {
-                if (source_id > 0) {
-                    Source.remove(source_id);
-                    source_id = 0;
-                }
-            });
-            reset(sock, stream, origin);
+            reset(conn);
         }
             
         public override void parse_device_info(ref DeviceManager.DeviceInfo dev) {
-            dev.ip_address = host_address.address.to_string();
-            dev.encryption = peer_cert;
+            dev.ip_address = socket_connection.host_address.address.to_string();
+            dev.encryption = socket_connection.peer_cert;
         }
         
         public override bool link_should_be_kept_alive() { return true;}
 
-        private void clean () {
-            cancel_link.cancel();
-            if (this.stream != null) {
-                try {
-                    if (!this.stream.is_closed()) { this.stream.close();}
-                } catch (IOError e) {
-                    debug("Error closing connection: %s\n", e.message);
-                }
+        private void close() {
+            info("Close the %s", name);
+            clean();
+            destroyed(device_id);
+        }
+        
+        private void clean() {
+            if (this.socket_connection != null) {
+                this.socket_connection.clean();
             }
         }
         
-        private void close() {
-            info("Close the Lan device link");
-            this.clean();
-            this.destroyed(device_id);
-        }
-
-        public void reset(Socket sock, IOStream stream, ConnectionStarted origin) {
+        public void reset(LanSocketConnection conn) {
             info("Reset the Lan device link");
             this.clean();
             
-            this.connection_source = origin;
+            this.socket_connection = conn;
 
-            //We take ownership of the socket.
-            this.socket = sock;
-            this.socket.set_blocking(true);
-            this.stream = stream;
-            
-            this.tls_conn = stream as TlsConnection;
-            if (this.tls_conn != null && this.tls_conn is TlsConnection) {
-                TLS = true;
-            } else {
-                TLS = false;
-            }
+            this.socket_connection.forced_close.connect(close);
+            this.socket_connection.packet_received.connect(packet_received);
 
-            host_address = (InetSocketAddress)this.socket.get_remote_address();
-            
-            this.dos = this.stream.output_stream;
-            this.dis = this.stream.input_stream;
-            
-            if (TLS) {
-//                debug("DeviceLink is a TlsConnection");
-                this.peer_cert = tls_conn.get_peer_certificate().certificate_pem;
-                
-                // If already paired
-                bool has_cert = Config.Config.instance().has_certificate(device_id);
-                set_and_announce_pair_status(has_cert? Connection.DeviceLink.PairStatus.PAIRED : Connection.DeviceLink.PairStatus.NOT_PAIRED);
-            } else {
-//                debug("DeviceLink is a TcpConnection");
-                bool is_paired = Config.Config.instance().is_paired(device_id);
-                set_and_announce_pair_status(is_paired? Connection.DeviceLink.PairStatus.PAIRED : Connection.DeviceLink.PairStatus.NOT_PAIRED);
-            }
+            bool has_cert = Config.Config.instance().has_certificate(device_id);
+            set_and_announce_pair_status(has_cert? Connection.DeviceLink.PairStatus.PAIRED : Connection.DeviceLink.PairStatus.NOT_PAIRED);
+
             // Watch for incoming messages
-            this.monitor();
+            this.socket_connection.monitor();
         }
         
         public override void set_pair_status(Connection.DeviceLink.PairStatus status) {
-            if (TLS) {
-                var peer_cert = this.peer_cert;
-                if (status == Connection.DeviceLink.PairStatus.PAIRED && peer_cert == null) {
-                    pairing_error("This device cannot be set to paired because it is running an old version of KDE Connect.");
-                    return;
-                }
-                set_and_announce_pair_status(status);
-                if (status == Connection.DeviceLink.PairStatus.PAIRED) {
-                    assert(Config.Config.instance().is_paired(device_id));
-                    // Store certificate
-                    assert(peer_cert != null);
-                    assert(Config.Config.instance().set_certificate_for_device(device_id, peer_cert));
-                }
-            } else {
-                set_and_announce_pair_status(status);
-                if (status == Connection.DeviceLink.PairStatus.PAIRED) {
-                    assert(Config.Config.instance().is_paired(device_id));
-                }
+            var peer_cert = this.socket_connection.peer_cert;
+            if (status == Connection.DeviceLink.PairStatus.PAIRED && peer_cert == null) {
+                pairing_error("This device cannot be set to paired because it is running an old version of KDE Connect.");
+                return;
+            }
+            set_and_announce_pair_status(status);
+            if (status == Connection.DeviceLink.PairStatus.PAIRED) {
+                assert(Config.Config.instance().is_paired(device_id));
+                // Store certificate
+                assert(peer_cert != null);
+                assert(Config.Config.instance().set_certificate_for_device(device_id, peer_cert));
             }
         }
 
@@ -153,117 +102,19 @@ namespace Gconnect.LanConnection {
 //            return job;
 //        }
 
-        public override void user_requests_pair() {
-            if (TLS && this.peer_cert == null) {
-                pairing_error("This device cannot be asked to pair because it is running an old version of KDE Connect.");
-            } else {
-                create_pairing_handler();
-                this.pairing_handler.request_pairing();
-            }
-        }
-        
-        public override void user_requests_unpair() {
-            create_pairing_handler();
-            this.pairing_handler.unpair();
-        }
-        
-        private void incoming_pair_packet(NetworkProtocol.Packet pkt) {
-            create_pairing_handler();
-            this.pairing_handler.packet_received(pkt);
-        }
-        
-        private void create_pairing_handler() {
-            if (!this.has_pairing_handler()) {
-                this.pairing_handler = new Connection.PairingHandler(this);
-                debug("Creating pairing handler for %s", this.device_id);
-                this.pairing_handler.pairing_error.connect((s,m) => {this.pairing_error(m); });
-            }
-        }
-
-        private bool send_sync(OutputStream output, string sent) throws Error {
-            size_t len;
-            bool res = output.write_all(sent.data, out len, cancel_link);
-#if DEBUG_BUILD
-            // Should not log the content of every packet sent in normal condition
-            debug("LanDeviceLink, packet sent: %s", sent);
-#endif
-            return res;
-        }
-        
-        // TODO: needs to properly manage a queue to make it work
-        private async void send_async(OutputStream output, string sent) throws Error {
-            size_t len;
-            yield output.write_all_async(sent.data, Priority.DEFAULT_IDLE, cancel_link, out len);
-#if DEBUG_BUILD
-            // Should not log the content of every packet sent in normal condition
-            debug("LanDeviceLink, packet sent async: %s", sent);
-#endif
-        }
-        
         public override bool send_packet(NetworkProtocol.Packet input) {
             if (input.has_payload()) {
 //                np.setPayloadTransferInfo(sendPayload(np)->transferInfo());
             }
-
-            try {
-                string sent = input.serialize() + "\n";
-                bool res = send_sync(this.dos, sent);
-                return res;
-            } catch (IOError e) {
-                warning("Error sending packet: %s", e.message);
-                this.close();
-            }
-            return false;
+            return this.socket_connection.send_packet(input);
         }
         
-        private async void monitor() {
-            cancel_link.reset();
-
-            // Must use sync callback otherwise input_stream errors are thrown: "Stream has outstanding operation"
-            SocketSource source = this.socket.create_source(IOCondition.IN | IOCondition.ERR | IOCondition.HUP);
-            source.set_callback( (sock, cond) => {
-                if (sock.get_available_bytes() > 0 && cond == IOCondition.IN) {
-                    this.data_received_sync();
-                } else if (IOCondition.HUP in cond || IOCondition.ERR in cond) {
-                    this.close();
-                    return GLib.Source.REMOVE; // continue watching
-                }
-                return GLib.Source.CONTINUE; // continue watching
-            });
-            source_id = source.attach(MainContext.default ());
-        }
-
-        private void data_received_sync() {
-            string data = null;
-            try {
-                data = read_line(this.dis);
-            } catch (Error e) {
-                warning("Error receiving packet: %s", e.message);
-                this.close();
+        public override void user_requests_pair() {
+            if (this.socket_connection.peer_cert == null) {
+                pairing_error("This device cannot be asked to pair because it is running an old version of KDE Connect.");
+            } else {
+                request_pair();
             }
-
-            if (data == null) {
-                return;
-            }
-            NetworkProtocol.Packet raw_pkt = null;
-            try {
-                raw_pkt = NetworkProtocol.Packet.unserialize(data);
-            } catch (NetworkProtocol.PacketError e) {
-                warning("Error unserializing json packet %s", data);
-                return;
-            }
-            packet_received(raw_pkt);
-        }
-        
-        private string? read_line (InputStream input) throws Error {
-            var buffer = new uint8[1];
-            var sb = new StringBuilder ();
-            buffer[0] = '\0';
-            while (buffer[0] != '\n') {
-                input.read (buffer, cancel_link);
-                sb.append_c ((char) buffer[0]);
-            }
-            return (string) sb.data;
         }
 
         private void packet_received(NetworkProtocol.Packet pkt) {
@@ -276,11 +127,6 @@ namespace Gconnect.LanConnection {
                 warning("This is an old protocol, it is not supported anymore, use TLS.");
                 return;
             }
-
-#if DEBUG_BUILD
-            // Should not log the content of every packet received in normal condition
-            debug("LanDeviceLink, packet received: %s", pkt.to_string());
-#endif
 
 //            if (package.hasPayloadTransferInfo()) {
 //                //qCDebug(KDECONNECT_CORE) << "HasPayloadTransferInfo";

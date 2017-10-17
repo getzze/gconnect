@@ -196,7 +196,7 @@ namespace Gconnect.DeviceManager {
 
         //Add and remove links
         [DBus (visible = false)]
-        public void add_link(Connection.DeviceLink dl)
+        internal void add_link(Connection.DeviceLink dl)
 //                requires (!device_links.contains(dl))
         {
             if (device_links.contains(dl)) {
@@ -238,7 +238,7 @@ namespace Gconnect.DeviceManager {
         }
 
         [DBus (visible = false)]
-        public void remove_link(Connection.DeviceLink dl) {
+        internal void remove_link(Connection.DeviceLink dl) {
             device_links.remove(dl);
 
             debug("Remove link, %d links remaining.", device_links.size);
