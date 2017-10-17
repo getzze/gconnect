@@ -28,10 +28,17 @@ To build gconnect:
     meson ..
     ninja && sudo ninja install
 
-## Project structure
+## Experimental bluetooth support:
 
-This project uses the [Vala project template](https://github.com/flplv/vala-cmake-example).
-Thanks to its developers for simplifying all this boring and complex work.
+Set the `gconnect_bluetooth` option to `true` in the `meson_options.txt` file or with the command-line:
+
+    meson configure -Dgconnect_bluetooth=true
+    
+Then build.
+
+It needs a modified apk.
+See https://www.reddit.com/r/linux/comments/6ggb36/kde_connect_works_over_bluetooth_now_please_help/
+
 
 # Special Thanks
 
