@@ -48,7 +48,10 @@ namespace PluginsGconnect.Mousepad {
         private const string PACKET_TYPE_KEYBOARDSTATE = "kdeconnect.mousepad.keyboardstate";
         
         private bool X11 = true;
+        private Fakekey fakekey;
+#if CARIBOU
         private Caribou.XAdapter xkbd;
+#endif
         private unowned X.Display display = null;
         private unowned string[] argv = null;
 
@@ -91,25 +94,42 @@ namespace PluginsGconnect.Mousepad {
         construct {
             if (Gtk.init_check(ref this.argv)) {
                 display = Gdk.X11.get_default_xdisplay();
+                if (display == null) {
+                    warning("No X11 display available");
+                    X11 = false;
+                    return;
+                }
+                X11 = true;
+#if CARIBOU
                 // Cannot instanciate Caribou.XAdapter directly, otherwise Caribou segfaults...
                 Caribou.DisplayAdapter xadapter = Caribou.DisplayAdapter.get_default();
                 xkbd = xadapter as Caribou.XAdapter;
+                if (xkbd != null) {
+                    debug("Mousepad plugin uses Caribou library");
+                    fakekey = null;
+                    return;
+                }
+#endif
+                fakekey = new Fakekey(display);
+                debug("Mousepad plugin uses Xlib wrapper");
             }
         }
         
         public MousepadProxy(Gconnect.Plugin.PluginProxy proxy) {
             base(proxy);
-            if (display == null || xkbd == null) {
-                warning("No X11 display available");
-                X11 = false;
-            }
         }
 
-        void send_keyval (uint keysym, uint mask) {
-            this.xkbd.mod_latch(mask);
-            this.xkbd.keyval_press(keysym);
-            this.xkbd.keyval_release(keysym);
-            this.xkbd.mod_unlatch(mask);
+        void send_keyval (uint keysym, Gdk.ModifierType mask) {
+#if CARIBOU
+            if (this.fakekey == null) {
+                this.xkbd.mod_latch(mask);
+                this.xkbd.keyval_press(keysym);
+                this.xkbd.keyval_release(keysym);
+                this.xkbd.mod_unlatch(mask);
+                return;
+            }
+#endif
+            this.fakekey.press_and_release(keysym, mask);
         }
 
         private void handle_packet_X11(Gconnect.NetworkProtocol.Packet pkt) {
@@ -126,10 +146,6 @@ namespace PluginsGconnect.Mousepad {
             string key = pkt.has_field("key") ? pkt.get_string("key") : "";
             int specialKey = pkt.has_field("specialKey") ? pkt.get_int("specialKey") : 0;
             
-//            bool left_handed = is_left_handed(this.display);
-//            int mainMouseButton = left_handed ? MouseButtons.RightMouseButton : MouseButtons.LeftMouseButton;
-//            int secondaryMouseButton = left_handed ? MouseButtons.LeftMouseButton : MouseButtons.RightMouseButton;
-
             if (isSingleClick) {
                 XTest.fake_button_event(this.display, Gdk.BUTTON_PRIMARY, true, 0);
                 XTest.fake_button_event(this.display, Gdk.BUTTON_PRIMARY, false, 0); 
@@ -162,23 +178,17 @@ namespace PluginsGconnect.Mousepad {
                 bool ctrl  = pkt.has_field("ctrl")  ? pkt.get_bool("ctrl")  : false;
                 bool alt   = pkt.has_field("alt")   ? pkt.get_bool("alt")   : false;
                 bool shift = pkt.has_field("shift") ? pkt.get_bool("shift") : false;
+                bool meta  = pkt.has_field("meta")  ? pkt.get_bool("meta")  : false;
 
-                uint mask = 0;
+                Gdk.ModifierType mask = 0;
                 if (ctrl)  mask |= Gdk.ModifierType.CONTROL_MASK;
                 if (shift) mask |= Gdk.ModifierType.SHIFT_MASK;
                 if (alt)   mask |= Gdk.ModifierType.MOD1_MASK;  // Alt key
-
-//                if (ctrl)  XTest.fake_key_event(this.display, this.display.keysym_to_keycode(Gdk.Key.Control_L), true, 0);
-//                if (alt)   XTest.fake_key_event(this.display, this.display.keysym_to_keycode(Gdk.Key.Alt_L),     true, 0);
-//                if (shift) XTest.fake_key_event(this.display, this.display.keysym_to_keycode(Gdk.Key.Shift_L),   true, 0);
-                
+                if (meta)  mask |= Gdk.ModifierType.META_MASK;  // Super key
 
                 if (specialKey != 0 && specialKey < SpecialKeysMap.length) {
                     uint keysym = SpecialKeysMap[specialKey];
                     send_keyval(keysym, mask);
-//                    int keycode = this.display.keysym_to_keycode (SpecialKeysMap[specialKey]);
-//                    XTest.fake_key_event(this.display, keycode, true, 0);
-//                    XTest.fake_key_event(this.display, keycode, false, 0);                
                 } else {
                     unichar c;
                     for (int i = 0; key.get_next_char (ref i, out c);) {
@@ -187,11 +197,7 @@ namespace PluginsGconnect.Mousepad {
                     }
                 }
 
-//                if (shift) XTest.fake_key_event(this.display, display.keysym_to_keycode (Gdk.Key.Shift_L),   false, 0);
-//                if (alt)   XTest.fake_key_event(this.display, display.keysym_to_keycode (Gdk.Key.Alt_L),     false, 0);
-//                if (ctrl)  XTest.fake_key_event(this.display, display.keysym_to_keycode (Gdk.Key.Control_L), false, 0);
-                
-            } else {
+            } else if (dx != 0 || dy != 0) {
                 // Move mouse
                 XTest.fake_relative_motion_event(this.display, (int) dx, (int) dy, 0);
             }
