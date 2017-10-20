@@ -1002,6 +1002,10 @@ namespace GnuTLS
 			public int set_extension_by_oid (string oid, void* buf, size_t buf_size, bool critical);
 			public int set_dn_by_oid (string oid, uint raw_flag, void* name, uint name_size);
 			public int set_issuer_dn_by_oid (string oid, uint raw_flag, void* name, uint name_size);
+			
+            public int set_string_extension_by_oid (string oid, string extension, bool critical) {
+                return set_extension_by_oid (oid, extension.data, extension.length, critical);
+            }
             public int set_string_dn_by_oid (string oid, uint raw_flag, string name) {
                 return set_dn_by_oid (oid, raw_flag, name.data, name.length);
             }
