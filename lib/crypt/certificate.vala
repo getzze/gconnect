@@ -14,6 +14,7 @@
  *
  * AUTHORS
  * Maciek Borzecki <maciek.borzecki (at] gmail.com>
+ * <getzze (at] gmail.com> (minor modifications)
  */
 
 namespace Gconnect.Crypt {
