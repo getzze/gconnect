@@ -33,11 +33,13 @@ namespace PluginsGconnect.Mousepad {
         private int min_keycode;
         private int max_keycode;
         private int n_keysyms_per_keycode;
+        private int n_empty_keycodes;
         private ulong[] keysyms;
+        private ulong original_keysym = 0;
         private uchar held_keycode;
         private Gdk.ModifierType held_state_flags;
         
-        private int modified_key;
+        private int modified_key = -1;
         
 		public Fakekey (X.Display display) {
             this.xdisplay = display;
@@ -46,6 +48,34 @@ namespace PluginsGconnect.Mousepad {
             this.keysyms = this.xdisplay.get_keyboard_mapping((uchar)this.min_keycode,
                                                              this.max_keycode - this.min_keycode + 1,
                                                              ref this.n_keysyms_per_keycode);
+            this.n_empty_keycodes = get_size_empty_keycodes();
+            if (this.n_empty_keycodes == 0) {
+                this.n_empty_keycodes = 1;
+                int index = (this.max_keycode - this.min_keycode - 1) * this.n_keysyms_per_keycode;
+                this.original_keysym = this.keysyms[index];
+                debug("No available keycode to store unicode, overwriting keycode %d (keysym %lu)", this.max_keycode - 1, this.original_keysym);
+            }
+            // TODO: add a notifier for keyboard changes
+        }
+        
+        ~Fakekey() {
+            // Should be called before closing...
+            uchar code;
+            int index;
+            for (int size = 0; size<this.n_empty_keycodes; size++) {
+                index = (this.max_keycode - this.min_keycode - size - 1) * this.n_keysyms_per_keycode;
+                if (this.original_keysym != 0) {
+                    assert(this.n_empty_keycodes == 1);
+                    this.keysyms[index] = this.original_keysym;
+                } else {
+                    this.keysyms[index] = 0;
+                }
+            }
+            // Use custom vapi because these functions are not included in x11 vapi.
+            change_keyboard_mapping(this.xdisplay, this.min_keycode, this.n_keysyms_per_keycode, this.keysyms, this.max_keycode - this.min_keycode + 1);
+            // Sync for the mapping change to be effective now
+            sync(this.xdisplay, false);
+            debug("Keyboardmap cleaned");
         }
         
         private void send_keyevent(uchar keycode, bool is_press, Gdk.ModifierType flags) {
@@ -56,6 +86,21 @@ namespace PluginsGconnect.Mousepad {
                 XTest.fake_key_event(this.xdisplay, keycode, is_press, 0);
                 send_modifiersevent(flags, is_press);
             }
+        }
+
+        private int get_size_empty_keycodes() {
+            int MAX_SIZE = 5;
+            uchar code;
+            ulong keysym;
+            // Look for the last 5 keycodes until a used keycode is found
+            for (int size = 0; size<MAX_SIZE; size++) {
+                code = (uchar)(this.max_keycode - size - 1);
+                keysym = this.xdisplay.keycode_to_keysym (code, 0);
+                if (keysym != 0){
+                    return size;
+                }
+            }
+            return MAX_SIZE;
         }
 
         private void send_modifiersevent(Gdk.ModifierType flags, bool is_press) {
@@ -95,20 +140,20 @@ namespace PluginsGconnect.Mousepad {
             if (code == 0) {
                 int index;
      
-                /* Change one of the last 10 keysyms to our converted utf8,
+                /* Change one of the last 5 keysyms to our converted utf8,
                  * remapping the x keyboard on the fly. 
                  *
-                 * This make assumption the last 10 arn't already used.
+                 * This make assumption the last 5 arn't already used.
                  * TODO: probably safer to check for this. 
                  */
-                this.modified_key = (this.modified_key + 1) % 10;
+                this.modified_key = (this.modified_key + 1) % this.n_empty_keycodes;
      
                 /* Point at the end of keysyms, modifier 0 */
                 index = (this.max_keycode - this.min_keycode - this.modified_key - 1) * this.n_keysyms_per_keycode;
                 this.keysyms[index] = keysym;
                 
                 // Use custom vapi because these functions are not included in x11 vapi.
-                change_keyboard_mapping(this.xdisplay, this.min_keycode, this.n_keysyms_per_keycode, this.keysyms, this.max_keycode - this.min_keycode);
+                change_keyboard_mapping(this.xdisplay, this.min_keycode, this.n_keysyms_per_keycode, this.keysyms, this.max_keycode - this.min_keycode + 1);
                 // Sync for the mapping change to be effective now
                 sync(this.xdisplay, false);
 

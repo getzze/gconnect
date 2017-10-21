@@ -121,7 +121,7 @@ namespace PluginsGconnect.Mousepad {
 
         void send_keyval (uint keysym, Gdk.ModifierType mask) {
 #if CARIBOU
-            if (this.fakekey == null) {
+            if (this.xkbd != null && this.fakekey == null) {
                 this.xkbd.mod_latch(mask);
                 this.xkbd.keyval_press(keysym);
                 this.xkbd.keyval_release(keysym);

@@ -27,9 +27,10 @@ plugin_deps = [
 ]
 
 opt_dep = dependency('caribou-1.0', required : false)
-if opt_dep.found()
+opt = get_option('use_caribou')
+if opt_dep.found() and opt
   plugin_deps += opt_dep
-  vala_args = '-DCARIBOU'
+  vala_args = '--define=CARIBOU'
 endif
 
 
