@@ -106,10 +106,14 @@ namespace Gconnect.Core {
                 this.link_providers.add(new LoopbackConnection.LoopbackLinkProvider());
             }
 #if GCONNECT_LAN
-            this.link_providers.add(new LanConnection.LanLinkProvider(TestMode.LAN in test_mode));
+            try {
+                this.link_providers.add(new LanConnection.LanLinkProvider(TestMode.LAN in test_mode));
+	    } catch (Error) {}
 #endif
 #if GCONNECT_BLUETOOTH
-            this.link_providers.add(new BluetoothConnection.BluetoothLinkProvider(TestMode.BLUETOOTH in test_mode));
+            try {
+	        this.link_providers.add(new BluetoothConnection.BluetoothLinkProvider(TestMode.BLUETOOTH in test_mode));
+	    } catch (Error) {}
 #endif
         }            
         
@@ -136,7 +140,7 @@ namespace Gconnect.Core {
             // Discover new devices
             foreach (var lp in this.link_providers) {
                 lp.on_connection_received.connect(this.on_new_device_link);
-                lp.on_start();
+                try { lp.on_start(); } catch (Error e) {}
             }
 
             // Change displayed name
@@ -185,7 +189,7 @@ namespace Gconnect.Core {
         private void remove_device(DeviceManager.Device device) {
             string id = device.id;
             // Unpublish from DBus
-            device.unpublish();
+            try { device.unpublish(); } catch (Error e) {}
             
             foreach (var provider in link_providers) {
                 if (provider.name == "LanLinkProvider") {
@@ -368,7 +372,7 @@ namespace Gconnect.Core {
         private void unpublish () {
             // Unpublish devices
             foreach (var device in this.devices.values) {
-                device.unpublish();
+                try { device.unpublish(); } catch (Error e) {}
             }
             // Unpublish core
             this.conn.unregister_object(bus_id);
