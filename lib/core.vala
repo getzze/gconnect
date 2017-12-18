@@ -108,12 +108,12 @@ namespace Gconnect.Core {
 #if GCONNECT_LAN
             try {
                 this.link_providers.add(new LanConnection.LanLinkProvider(TestMode.LAN in test_mode));
-	    } catch (Error) {}
+	    } catch (Error e) {}
 #endif
 #if GCONNECT_BLUETOOTH
             try {
 	        this.link_providers.add(new BluetoothConnection.BluetoothLinkProvider(TestMode.BLUETOOTH in test_mode));
-	    } catch (Error) {}
+	    } catch (Error e) {}
 #endif
         }            
         
