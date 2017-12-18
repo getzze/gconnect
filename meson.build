@@ -50,8 +50,12 @@ package_name = meson.project_name() + '-' + api_version
 gir_name = 'Gconnect-' + api_version
 
 doc_subdir = join_paths(get_option('datadir'), 'doc', meson.project_name())
-install_data('COPYING', 'HISTORY.md', 'README.md',
+install_data('HISTORY.md', 'README.md',
     install_dir: doc_subdir)
+
+licenses_subdir = join_paths(get_option('datadir'), 'licenses', meson.project_name())
+install_data('COPYING',
+    install_dir: licenses_subdir)
 
 subdir('lib')
 subdir('daemon')
