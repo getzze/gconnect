@@ -24,7 +24,7 @@ gconnect_conf.set_quoted('PACKAGE_DATADIR', join_paths(get_option('prefix'), get
                   description: 'Define to datadir of this package.')
 gconnect_conf.set_quoted('PACKAGE_LOCALEDIR', join_paths(get_option('prefix'), get_option('datadir'), 'locale'),
                   description: 'Define to locale dir of this package.')
-gconnect_conf.set_quoted('PACKAGE_PLUGINSDIR', join_paths(get_option('prefix'), plugin_subdir), 
+gconnect_conf.set_quoted('PACKAGE_PLUGINSDIR', join_paths(get_option('prefix'), plugin_subdir),
                   description: 'Define to plugins dir of this package.')
 gconnect_conf.set_quoted('SETTINGS_PATH', '/apps/gconnect/',
                   description: 'Define to root path of gsettings for this package.')

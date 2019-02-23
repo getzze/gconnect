@@ -39,23 +39,23 @@ namespace Gconnect.Connection {
         public virtual LinkConfig config { get; protected set; default=new LinkConfig(); }
         public abstract string name {get; protected set; }
         public abstract int priority {get; protected set; }
-        
+
         public signal void on_connection_received(NetworkProtocol.Packet ip, DeviceLink dl);
 
         public abstract void on_start() throws Error ;
         public abstract void on_stop() throws Error ;
         public abstract void on_network_change() throws Error ;
     }
-    
+
     public abstract class SocketConnectionLink: GLib.Object {
         protected weak GLib.Socket socket;
         protected GLib.IOStream stream;
         protected uint source_id = 0;
         protected GLib.Cancellable cancel_link;
-        
+
         public signal void packet_received(NetworkProtocol.Packet pkt);
         public signal void forced_close();
-        
+
         public SocketConnectionLink() {
             this.cancel_link = new GLib.Cancellable();
             cancel_link.cancelled.connect((s)=> {
@@ -65,7 +65,7 @@ namespace Gconnect.Connection {
                 }
             });
         }
-        
+
         ~SocketConnectionLink() {
             try {
                 close();
@@ -133,7 +133,7 @@ namespace Gconnect.Connection {
             }
             return false;
         }
-        
+
         public bool write(string sent) throws IOError {
             var output_stream = this.stream.get_output_stream();
             size_t len;
@@ -173,7 +173,7 @@ namespace Gconnect.Connection {
 
             packet_received(raw_pkt);
         }
-        
+
         public string? read_line () throws Error {
             var input_stream = this.stream.get_input_stream();
             var buffer = new uint8[1];
@@ -210,7 +210,7 @@ namespace Gconnect.Connection {
         public signal void pairing_error(string mess);
         public signal void received_packet(NetworkProtocol.Packet np);
         public signal void destroyed(string device_id);
-        
+
         public DeviceLink(string id, LinkProvider parent)
                 requires (id != "")
         {
@@ -218,7 +218,7 @@ namespace Gconnect.Connection {
             this._link_provider = parent;
             this._pair_status = PairStatus.NOT_PAIRED;
         }
-        
+
         ~DeviceLink() {
             this.pairing_handler = null;
             destroyed(this.device_id);
@@ -231,14 +231,14 @@ namespace Gconnect.Connection {
         public virtual void set_pair_status(PairStatus status) {
             set_and_announce_pair_status(status);
         }
-        
+
         protected void set_and_announce_pair_status(PairStatus st) {
             if (_pair_status != st) {
                 _pair_status = st;
                 pair_status_changed(this, _pair_status);
             }
         }
-        
+
         public abstract bool send_packet(NetworkProtocol.Packet pkt);
 
         protected void create_pairing_handler() {
@@ -252,12 +252,12 @@ namespace Gconnect.Connection {
             create_pairing_handler();
             this.pairing_handler.packet_received(pkt);
         }
-        
+
         protected void request_pair() {
             create_pairing_handler();
             this.pairing_handler.request_pairing();
         }
-        
+
         protected void request_unpair() {
             create_pairing_handler();
             this.pairing_handler.unpair();
@@ -275,7 +275,7 @@ namespace Gconnect.Connection {
         public virtual bool has_pairing_handler() {
             return (this.pairing_handler != null)?true:false;
         }
-        
+
         public virtual bool user_accepts_pair() {
             if (this.has_pairing_handler()) {
                 this.pairing_handler.accept_pairing();
@@ -293,21 +293,21 @@ namespace Gconnect.Connection {
         }
 
         public virtual void parse_device_info(ref DeviceManager.DeviceInfo dev) {}
-        
+
 //        public virtual DeviceLinkInfo get_info() {
 //            var ret = new DeviceLinkInfo();
 //            return ret;
 //        }
-        
+
         //The daemon will periodically destroy unpaired links if this returns false
         public virtual bool link_should_be_kept_alive() { return false;}
     }
-    
+
     public class PairingHandler : GLib.Object {
         private weak DeviceLink _device_link;
         private uint timer_id = 0;
         private InternalPairStatus status;
-        
+
         public enum InternalPairStatus {
             NOT_PAIRED,
             REQUESTED,
@@ -348,14 +348,14 @@ namespace Gconnect.Connection {
                 }
             } else {  // wants_pair==false
                 debug("Unpair request");
-                
+
                 if (is_pair_requested())  {
                     pairing_error(_("Canceled by other peer"));
                 }
                 set_internal_pair_status(InternalPairStatus.NOT_PAIRED);
             }
         }
-        
+
         public bool request_pairing() {
             if (this.status == InternalPairStatus.PAIRED) {
                 pairing_error(_("Already paired") + ": %s".printf(this.device_link.name));
@@ -374,7 +374,7 @@ namespace Gconnect.Connection {
             }
             return success;
         }
-        
+
         public bool accept_pairing() {
             var new_pkt = new NetworkProtocol.Packet.pair();
             debug("Pairing handler - accept pairing");
@@ -384,11 +384,11 @@ namespace Gconnect.Connection {
             }
             return success;
         }
-        
+
         public void reject_pairing() {
             unpair();
         }
-        
+
         public void unpair() {
             var new_pkt = new NetworkProtocol.Packet.pair(false);
             debug("Pairing handler - ask for unpairing");
@@ -432,4 +432,4 @@ namespace Gconnect.Connection {
             }
         }
     }
-} 
+}

@@ -26,7 +26,7 @@ using Gee;
 
 namespace Gconnect.LanConnection {
     uint MIN_VERSION_WITH_SSL_SUPPORT = 6;
-    
+
     public enum ConnectionStarted { LOCALLY, REMOTELY }
 
     private string string_to_locale(string raw_string, ssize_t len = -1) throws ConvertError {
@@ -45,7 +45,7 @@ namespace Gconnect.LanConnection {
         bool need_convert = GLib.get_charset (out locale);
         if (need_convert) {
             data = GLib.convert ( text, text.length, "UTF-8", locale);
-        }       
+        }
         return data;
     }
 
@@ -69,7 +69,7 @@ namespace Gconnect.LanConnection {
         private InetSocketAddress broadcast_address;
         private uint udp_source_id = 0;
         private uint16 tcp_port;
-        
+
         private HashMap<string, LanConnection.LanDeviceLink> links;
 
         private bool test_mode;
@@ -84,7 +84,7 @@ namespace Gconnect.LanConnection {
             this._config = new LanLinkConfig();
             this.tcp_port = 0;
             this.test_mode = mode;
-            
+
             links = new HashMap<string, LanConnection.LanDeviceLink>();
 
             InetAddress client_address;
@@ -106,7 +106,7 @@ namespace Gconnect.LanConnection {
             udp_send_socket.set_broadcast(true);
             udp_send_socket.set_multicast_loopback(false);
             udp_send_socket.set_multicast_ttl(1);
-            
+
             client = new SocketClient();
             client.set_family(SocketFamily.IPV4);
             client.set_enable_proxy(false);
@@ -118,7 +118,7 @@ namespace Gconnect.LanConnection {
                 var tls_bkd = TlsBackend.get_default();
                 debug("TLS supported: %s -> %s", tls_bkd.supports_tls().to_string(), tls_bkd.get_server_connection_type().name());
             }
-            
+
             server = new SocketService();
             // Used to shutdown the server
             server_cancellable = new Cancellable ();
@@ -130,7 +130,7 @@ namespace Gconnect.LanConnection {
                 return false; // continue listenning
             });
             server.set_backlog(10);
-            
+
             //Detect when a network interface changes status, so we announce ourelves in the new network
             this.monitor = NetworkMonitor.get_default();
             monitor.network_changed.connect((available) => {
@@ -140,16 +140,16 @@ namespace Gconnect.LanConnection {
                 }
             });
         }
-        
+
         // Public methods
         public override string name { get; protected set; default="LanLinkProvider"; }
         public override int priority { get; protected set; default=PRIORITY_HIGH; }
-        
+
         public static void configure_tls_connection(TlsConnection conn, string device_id) {
             var config = Config.Config.instance();
             var cert = config.certificate;
             conn.set_certificate(cert);
-            
+
             try {
                 conn.handshake();
             } catch (Error e) {
@@ -177,7 +177,7 @@ namespace Gconnect.LanConnection {
 //            }
 
         }
-        
+
         public static void configure_socket(Socket sock) throws Error {
             // time to start sending keepalive packets (seconds)
             int max_idle = 10;
@@ -195,13 +195,13 @@ namespace Gconnect.LanConnection {
 
         public override void on_start() throws Error {
             info("LanLinkProvider on start ...");
-            
+
             // Bind udp socket
             udp_socket.bind(this.udp_address, true);  // allow_reuse=true
             udp_send_socket.bind(this.udp_address, true);  // allow_reuse=true
             start_udp_watch();
             debug("Bind UDP socket to %s", this.udp_address.to_string());
-            
+
             // Start server listening
             this.tcp_port = this._config.tcp_range[0];
             while (!server.add_inet_port(this.tcp_port, null)) {
@@ -214,7 +214,7 @@ namespace Gconnect.LanConnection {
             }
             debug("Start TCP server on port %u", this.tcp_port);
             server.start();
-            
+
             on_network_change();
         }
 
@@ -224,7 +224,7 @@ namespace Gconnect.LanConnection {
             try {
                 udp_socket.close();
             } catch (Error e) {}
-            
+
             server.stop();
             server_cancellable.cancel();
             client_cancellable.cancel();
@@ -253,7 +253,7 @@ namespace Gconnect.LanConnection {
                 return;
             }
             InetSocketAddress inet_sender = sender as InetSocketAddress;
-            
+
 //            debug("UDP will be discarded. Received data from %s:%u : %s", inet_sender.address.to_string(), inet_sender.port, data);
             try {
                 new_udp_socket_connection.begin(inet_sender, data);
@@ -261,7 +261,7 @@ namespace Gconnect.LanConnection {
                 // pass
             }
         }
-    
+
         private async void new_udp_socket_connection(InetSocketAddress sender, string data) throws Error {
             NetworkProtocol.Packet pkt = null;
             try {
@@ -274,7 +274,7 @@ namespace Gconnect.LanConnection {
                 warning("LanLinkProvider udp socket: Expected identity, received %", pkt.packet_type);
                 return;
             }
-            
+
             string dev_id = pkt.get_device_id();
             if (dev_id == Config.Config.instance().device_id) {
                 debug("Ignoring my own broadcast.");
@@ -311,7 +311,7 @@ namespace Gconnect.LanConnection {
                 return;
             }
 
-            
+
             // If network is on ssl, do not believe when they are connected, believe when handshake is completed
             bool res = false;
             var new_pkt = new NetworkProtocol.Packet.identity();
@@ -338,8 +338,8 @@ namespace Gconnect.LanConnection {
                 udp_socket.send_to(conn.get_remote_address(), sent.data);
             }
 
-        }    
-        
+        }
+
         private void on_server_connection(SocketConnection conn) {
             // Configure TCP socket
             try {
@@ -348,7 +348,7 @@ namespace Gconnect.LanConnection {
                 warning("Error configuring the socket: %s", e.message);
                 return;
             }
-  
+
             // Process the request asynchronously
             new_server_connection.begin(conn);
         }
@@ -372,8 +372,8 @@ namespace Gconnect.LanConnection {
             } catch (Error e) {
                 warning("Error with server connection: %s\n", e.message);
                 return;
-            }   
-            
+            }
+
             NetworkProtocol.Packet pkt = null;
             try {
                 pkt = NetworkProtocol.Packet.unserialize(req);
@@ -388,7 +388,7 @@ namespace Gconnect.LanConnection {
 
             yield connected(conn, pkt, ConnectionStarted.REMOTELY);
         }
-       
+
         [Callback]
         private void device_link_destroyed(string id) {
             links.unset(id);
@@ -417,7 +417,7 @@ namespace Gconnect.LanConnection {
             });
             udp_source_id = source.attach(MainContext.default ());
         }
-        
+
         private bool broadcast_to_network() {
             if (!server.is_active()) {
                 //Server not started
@@ -453,10 +453,10 @@ namespace Gconnect.LanConnection {
                 warning("Error with udp broadcast: %s\n", e.message);
             }
         }
-        
+
         private async void connected(SocketConnection conn, NetworkProtocol.Packet id, ConnectionStarted origin) {
             string dev_id = id.get_device_id();
-            
+
             bool myself_allow_encryption = NetworkProtocol.PROTOCOL_VERSION >= MIN_VERSION_WITH_SSL_SUPPORT;
             bool others_allow_encryption = id.get_int("protocolVersion") >= MIN_VERSION_WITH_SSL_SUPPORT;
             if (myself_allow_encryption && others_allow_encryption) {
@@ -525,9 +525,9 @@ namespace Gconnect.LanConnection {
             debug("Accept peer certificate");
             return true;
         }
-        
+
         // Private methods
-        private void add_link(string device_id, Socket sock, TlsConnection tls_conn, 
+        private void add_link(string device_id, Socket sock, TlsConnection tls_conn,
                                 NetworkProtocol.Packet pkt, ConnectionStarted origin) {
             debug("Add link to device: %s", device_id);
             LanSocketConnection conn = new LanSocketConnection(sock, tls_conn, origin);
@@ -546,4 +546,4 @@ namespace Gconnect.LanConnection {
             on_connection_received(pkt, links[device_id]);
         }
     }
-} 
+}

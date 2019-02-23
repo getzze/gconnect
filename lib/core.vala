@@ -52,7 +52,7 @@ namespace Gconnect.Core {
         private unowned DBusConnection conn;
         private uint bus_name_id = 0;
         private uint bus_id = 0;
-        
+
         public signal void device_visibility_changed(string id, bool visible);
         public signal void announced_name_changed(string name);
         public signal void pairing_requests_changed(bool has_requests);
@@ -85,20 +85,20 @@ namespace Gconnect.Core {
             warning("A core error was reported: %s -> %s", title, description);
         }
 
-        
+
         protected Core (TestMode test_mode = 0) {
             this.link_providers = new HashSet<Connection.LinkProvider>();
             this.devices = new HashMap<string, DeviceManager.Device>();
             this.discovery_mode_acquisitions = new HashSet<string>();
             this.config = Config.Config.instance();
-            
+
             // Register on DBus
             this.bus_name_id = Bus.own_name (BusType.SESSION, "org.gconnect.core",
-								   BusNameOwnerFlags.NONE, 
-//								   BusNameOwnerFlags.ALLOW_REPLACEMENT
+                                   BusNameOwnerFlags.NONE,
+//                                 BusNameOwnerFlags.ALLOW_REPLACEMENT
 //                                   | BusNameOwnerFlags.REPLACE,
-                                   on_bus_acquired, 
-								   on_bus_name_acquired, 
+                                   on_bus_acquired,
+                                   on_bus_name_acquired,
                                    on_bus_name_lost);
 
             // Load backends
@@ -108,27 +108,27 @@ namespace Gconnect.Core {
 #if GCONNECT_LAN
             try {
                 this.link_providers.add(new LanConnection.LanLinkProvider(TestMode.LAN in test_mode));
-	    } catch (Error e) {}
+            } catch (Error e) {}
 #endif
 #if GCONNECT_BLUETOOTH
             try {
-	        this.link_providers.add(new BluetoothConnection.BluetoothLinkProvider(TestMode.BLUETOOTH in test_mode));
-	    } catch (Error e) {}
+                this.link_providers.add(new BluetoothConnection.BluetoothLinkProvider(TestMode.BLUETOOTH in test_mode));
+            } catch (Error e) {}
 #endif
-        }            
-        
+        }
+
         ~Core () {
             this.close();
         }
-        
+
         private void init_core() {
             // Register Core on dbus
-			try	{
+            try {
                 string path = this.dbus_path();
                 this.bus_id = (uint)conn.register_object(path, this);
-			} catch (IOError e) {
-				warning ("Could not register objects: %s", e.message);
-			}
+            } catch (IOError e) {
+                warning ("Could not register objects: %s", e.message);
+            }
 
             // Get known paired devices and connect on dbus
             var list = this.config.get_paired_devices();
@@ -148,11 +148,11 @@ namespace Gconnect.Core {
                 this.force_on_network_change();
                 this.announced_name_changed(this.config.device_name);
             });
-            
+
             debug("Gconnect core started.");
         }
 
-        
+
         public static Core instance() {
             if (__instance == null) {
                 var core = new Core();
@@ -185,19 +185,19 @@ namespace Gconnect.Core {
                 this.clean_devices();
             }
         }
-        
+
         private void remove_device(DeviceManager.Device device) {
             string id = device.id;
             // Unpublish from DBus
             try { device.unpublish(); } catch (Error e) {}
-            
+
             foreach (var provider in link_providers) {
                 if (provider.name == "LanLinkProvider") {
                     provider.config.remove_device(device);
                     break;
                 }
             }
-            
+
             this.devices.unset(device.id);
             this.device_removed(id);
         }
@@ -214,7 +214,7 @@ namespace Gconnect.Core {
                 }
             }
         }
-        
+
         [Callback]
         public void force_on_network_change() {
             debug("Sending onNetworkChange to %d LinkProviders.", this.link_providers.size);
@@ -335,9 +335,9 @@ namespace Gconnect.Core {
             this.devices[id] = device;
             assert(this.devices[id] != null);
             debug("Device %s added.", id);
-            
+
             this.device_added(id);
-            
+
 //            device.reload_plugins();
         }
 
@@ -354,21 +354,21 @@ namespace Gconnect.Core {
         public string self_id() {
             return this.config.device_id;
         }
-        
+
         /* DBus was acquired, register plugin objects */
-		private void on_bus_acquired (DBusConnection conn) {
-			this.conn = conn;
-		}
-		
-		private void on_bus_name_acquired (DBusConnection conn, string name) {
-			message("DBus server started with bus name '%s'.", name);
-            init_core();
-		}
-		
-		private void on_bus_name_lost (DBusConnection conn, string name) {
-			error("Could not aquire name '%s'\n", name);
+        private void on_bus_acquired (DBusConnection conn) {
+            this.conn = conn;
         }
-        
+
+        private void on_bus_name_acquired (DBusConnection conn, string name) {
+            message("DBus server started with bus name '%s'.", name);
+            init_core();
+        }
+
+        private void on_bus_name_lost (DBusConnection conn, string name) {
+            error("Could not aquire name '%s'\n", name);
+        }
+
         private void unpublish () {
             // Unpublish devices
             foreach (var device in this.devices.values) {
@@ -379,20 +379,20 @@ namespace Gconnect.Core {
         }
 
         /* should be a destructor, but '~Core()' never gets called? */
-		[DBus (visible = false)]
+        [DBus (visible = false)]
         public void close () {
-			debug("Try to close DBus connection.");
+            debug("Try to close DBus connection.");
             this.unpublish();
-            
-			Bus.unown_name(bus_name_id);
-			try {
-				this.conn.close_sync ();
-				message("DBus server stopped.");
-			}
-			catch (Error e) {
-				debug ("Error closing DBus connection: %s\n", e.message);
-			}
-            
+
+            Bus.unown_name(bus_name_id);
+            try {
+                this.conn.close_sync ();
+                message("DBus server stopped.");
+            }
+            catch (Error e) {
+                debug ("Error closing DBus connection: %s\n", e.message);
+            }
+
             __instance = null;
         }
     }
