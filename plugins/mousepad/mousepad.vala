@@ -55,7 +55,7 @@ namespace PluginsGconnect.Mousepad {
         private unowned X.Display display = null;
         private unowned string[] argv = null;
 
-        private int[] SpecialKeysMap = {
+        private uint[] SpecialKeysMap = {
             0,                   // Invalid
             Gdk.Key.BackSpace,   // 1
             Gdk.Key.Tab,         // 2
