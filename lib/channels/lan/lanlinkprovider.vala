@@ -218,7 +218,7 @@ namespace Gconnect.LanConnection {
             on_network_change();
         }
 
-        public override void on_stop() {
+        public override void on_stop() throws Error  {
             info("... LanLinkProvider on stop");
             stop_udp_watch();
             try {
@@ -230,7 +230,7 @@ namespace Gconnect.LanConnection {
             client_cancellable.cancel();
         }
 
-        public override void on_network_change() {
+        public override void on_network_change() throws Error  {
             if (combine_broadcasts_timer>0) {
                 debug("Preventing duplicate broadcasts");
                 return;

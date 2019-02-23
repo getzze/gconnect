@@ -38,13 +38,13 @@ namespace Gconnect.LoopbackConnection {
         
         public override void on_start() throws Error { on_network_change(); }
 
-        public override void on_stop() {
+        public override void on_stop() throws Error  {
             if (_device_link!=null) {
                 _device_link = null;
             }
         }
 
-        public override void on_network_change() {
+        public override void on_network_change() throws Error  {
             LoopbackDeviceLink new_device_link = new LoopbackDeviceLink("loopback", this);
 
             // Send received connection for the local device

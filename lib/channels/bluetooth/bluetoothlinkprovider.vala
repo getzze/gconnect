@@ -121,7 +121,7 @@ namespace Gconnect.BluetoothConnection {
             this.on_network_change();
         }
 
-        public override void on_stop() {
+        public override void on_stop() throws Error  {
             info("BluetoothLinkProvider on stop ...");
             if (this.profile != null) {
                 this.profile_manager.unregister_profile(this.profile_path);
@@ -132,7 +132,7 @@ namespace Gconnect.BluetoothConnection {
             }
         }
 
-        public override void on_network_change() {
+        public override void on_network_change() throws Error  {
             handle_managed_objects();
         }
 

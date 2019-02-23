@@ -43,8 +43,8 @@ namespace Gconnect.Connection {
         public signal void on_connection_received(NetworkProtocol.Packet ip, DeviceLink dl);
 
         public abstract void on_start() throws Error ;
-        public abstract void on_stop();
-        public abstract void on_network_change();
+        public abstract void on_stop() throws Error ;
+        public abstract void on_network_change() throws Error ;
     }
     
     public abstract class SocketConnectionLink: GLib.Object {
