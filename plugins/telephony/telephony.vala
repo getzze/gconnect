@@ -156,7 +156,7 @@ namespace PluginsGconnect.Telephony {
                 // close all notifications
                 foreach (var key in notifications.keys) {
                     var n = notifications[key];
-                    n.close();
+                    try { n.close(); } catch (Error e) {}
                     notifications.unset(key);
                 }
             } else {
