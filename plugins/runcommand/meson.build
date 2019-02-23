@@ -23,7 +23,7 @@ plugin_mod = shared_module(
   file,
   plugin_source,
   dependencies : plugin_deps,
-  vala_args: '--thread',
+#   vala_args: '--thread',
   install: true,
   install_dir: [join_paths(plugin_subdir, file), false, false],
 )
