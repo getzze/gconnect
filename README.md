@@ -39,6 +39,21 @@ Then build.
 It needs a modified apk.
 See https://www.reddit.com/r/linux/comments/6ggb36/kde_connect_works_over_bluetooth_now_please_help/
 
+# Usage
+
+Start the daemon with:
+
+    gconnectd
+
+Or with the debug option to get more information:
+
+    gconnectd --debug
+
+By default, `gconnect` is installed in `/usr/local`, if you get an error because of missing libraries, try:
+    
+    LD_LIBRARY_PATH=/usr/local/lib/ GI_TYPELIB_PATH=/usr/local/lib/girepository-1.0 gconnectd
+    
+
 
 # Special Thanks
 
