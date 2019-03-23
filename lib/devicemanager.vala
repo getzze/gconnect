@@ -277,11 +277,11 @@ namespace Gconnect.DeviceManager {
             if (is_paired()) {
                 return;
             }
-            var copy = new Gee.ArrayList<Connection.DeviceLink>();
-            copy.add_all(device_links);
-            foreach (var dl in copy) {
-                if (!dl.link_should_be_kept_alive()) {
-                    device_links.remove(dl);
+            
+            var iter = device_links.iterator();
+            while (iter.next()) {
+                if (!(iter.get().link_should_be_kept_alive())) {
+                    iter.remove();
                 }
             }
         }
