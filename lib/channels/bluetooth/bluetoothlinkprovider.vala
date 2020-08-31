@@ -133,7 +133,7 @@ namespace Gconnect.BluetoothConnection {
         }
 
         public override void on_network_change() throws Error  {
-            handle_managed_objects();
+            handle_managed_objects.begin();
         }
 
         // Private methods
@@ -154,7 +154,7 @@ namespace Gconnect.BluetoothConnection {
 
         private bool on_try_to_connect_devices() {
             connect_to_profile_timer = 0;
-            handle_managed_objects();
+            handle_managed_objects.begin();
             return false;  // Stop timer
         }
 

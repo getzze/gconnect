@@ -126,7 +126,7 @@ namespace Gconnect.BluetoothConnection {
                 };
                 
                 sockets[device] = data;
-                this.provider.incoming_connection(connection);
+                this.provider.incoming_connection.begin(connection);
             }
         }
         
@@ -159,11 +159,11 @@ namespace Gconnect.BluetoothConnection {
             }
         }
         
-        public bool is_connected(ObjectPath device) {
+        public bool is_connected(ObjectPath device) throws DBusError, IOError {
             return this.sockets.contains(device);
         }
 
-        public bool has_connected_devices() {
+        public bool has_connected_devices() throws DBusError, IOError {
             return (this.sockets.length>0);
         }
     }

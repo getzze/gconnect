@@ -35,7 +35,7 @@ namespace Gconnect.Plugin {
         public abstract void deactivate();
     }
     
-    public delegate uint RegisterDbus(DBusConnection conn) throws IOError;
+    public delegate uint RegisterDbus(DBusConnection conn) throws DBusError, IOError;
     
     public class PluginProxy : GLib.Object {
         private weak DeviceManager.Device device;
@@ -246,7 +246,7 @@ namespace Gconnect.Plugin {
             return engine.get_plugin_info (name);
         }
 
-        public bool load_plugin (string name) {
+        public bool load_plugin (string name) throws DBusError, IOError {
             var plugin = get_plugin (name);
             if (plugin == null) {
                 warning ("Plugin Not found");
@@ -255,7 +255,7 @@ namespace Gconnect.Plugin {
             return engine.try_load_plugin(plugin);
         }
 
-        public bool unload_plugin (string name) {
+        public bool unload_plugin (string name) throws DBusError, IOError {
             var plugin = get_plugin (name);
             if (plugin == null) {
                 warning ("Plugin Not found");

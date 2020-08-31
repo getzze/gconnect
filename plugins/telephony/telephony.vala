@@ -45,7 +45,7 @@ namespace PluginsGconnect.Telephony {
             base(proxy);
         }
 
-        public void send_sms(string phone_number, string message_body) {
+        public void send_sms(string phone_number, string message_body) throws DBusError, IOError {
             var pkt = new Gconnect.NetworkProtocol.Packet(PACKET_TYPE_SMS_REQUEST);
             pkt.set_bool("sendSms", true);
             pkt.set_string("phoneNumber", phone_number);

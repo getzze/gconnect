@@ -9,8 +9,8 @@ namespace PluginsGconnect.MprisControl {
     public interface DBusIface : DBusProxy {
         public signal void name_owner_changed (string name, string old_owner, string new_owner);
 
-        public abstract async string[] list_names () throws DBusError;
-        public abstract async string[] list_activatable_names () throws DBusError;
+        public abstract async string[] list_names () throws DBusError, IOError;
+        public abstract async string[] list_activatable_names () throws DBusError, IOError;
 //        [DBus (name = "org.freedesktop.DBus")]
 //        public abstract string[] list_names_sync () throws DBusError;
 //        public abstract string[] list_activatable_names_sync () throws DBusError;

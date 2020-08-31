@@ -51,12 +51,12 @@ namespace PluginsGconnect.Ping {
             }
         }
         
-        public void send_ping() {
+        public void send_ping() throws DBusError, IOError {
             var pkt = new Gconnect.NetworkProtocol.Packet(PACKET_TYPE_REQUEST);
             this.proxy.request(pkt);
         }
 
-        public void send_message(string mess) {
+        public void send_message(string mess) throws DBusError, IOError {
             var pkt = new Gconnect.NetworkProtocol.Packet(PACKET_TYPE_REQUEST);
             pkt.set_string("message", mess);
             this.proxy.request(pkt);

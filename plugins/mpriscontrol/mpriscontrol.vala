@@ -251,7 +251,7 @@ namespace PluginsGconnect.MprisControl {
             if (pkt.has_field("Seek")) {
                 var offset = (int64)(pkt.get_int("Seek"));
                 try {
-                    p.player.seek(offset);
+                    p.player.seek.begin(offset);
                 } catch (Error e) {
                     debug("Error calling dbus method Seek: %s", e.message);
                 }
@@ -264,7 +264,7 @@ namespace PluginsGconnect.MprisControl {
                 var offset = position - last_pos;
 //                debug("SetPosition to %d, current %d -> offset %d", position, last_pos, offset);
                 try {
-                    p.player.seek(offset);
+                    p.player.seek.begin(offset);
                 } catch (Error e) {
                     debug("Error calling dbus method Seek: %s", e.message);
                 }

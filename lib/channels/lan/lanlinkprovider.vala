@@ -437,7 +437,7 @@ namespace Gconnect.LanConnection {
             addresses.add_all_array(this._config.ip_discovery);
             addresses.add_all_array(this._config.get_known_ip_addresses());
             foreach (var addr in addresses) {
-                broadcast_to_address(sent, new InetSocketAddress.from_string(addr, this._config.udp_port));
+                broadcast_to_address.begin(sent, new InetSocketAddress.from_string(addr, this._config.udp_port));
             }
 
             // stop timer
@@ -496,7 +496,8 @@ namespace Gconnect.LanConnection {
             } else {
                 debug("Start TLS client connection");
                 tls_conn = TlsClientConnection.@new(conn, conn.get_remote_address());
-                (tls_conn as TlsClientConnection).set_use_ssl3(false);
+                // Deprecated since GLib 2.56
+                // (tls_conn as TlsClientConnection).set_use_ssl3(false);
                 (tls_conn as TlsClientConnection).set_certificate(cert);
             }
             tls_conn.set_require_close_notify(false);

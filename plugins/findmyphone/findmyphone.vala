@@ -37,7 +37,7 @@ namespace PluginsGconnect.Findmyphone {
             base(proxy);
         }
 
-        public void ring() {
+        public void ring() throws DBusError, IOError {
             var pkt = new Gconnect.NetworkProtocol.Packet(PACKET_TYPE_REQUEST);
             this.proxy.request(pkt);
         }

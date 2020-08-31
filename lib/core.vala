@@ -61,7 +61,7 @@ namespace Gconnect.Core {
 
         // Virtual methods, can be overridden because it requires user input.
         // For a CLI daemon, use libinput. For a GUI; use notifications.
-        public virtual void ask_pairing_confirmation(string device_id) {
+        public virtual void ask_pairing_confirmation(string device_id) throws DBusError, IOError {
             var list = this.config.get_auto_pair_devices();
             bool trusted = false;
             foreach (string id in list) {
@@ -81,7 +81,7 @@ namespace Gconnect.Core {
             }
         }
 
-        public virtual void report_error(string title, string description) {
+        public virtual void report_error(string title, string description) throws DBusError, IOError {
             warning("A core error was reported: %s -> %s", title, description);
         }
 
@@ -165,7 +165,7 @@ namespace Gconnect.Core {
         public string dbus_path() { return "/modules/gconnect";}
 
         [Callback]
-        public void acquire_discovery_mode(string key) {
+        public void acquire_discovery_mode(string key) throws DBusError, IOError {
             bool old_state = this.discovery_mode_acquisitions.size==0;
 
             this.discovery_mode_acquisitions.add(key);
@@ -176,7 +176,7 @@ namespace Gconnect.Core {
         }
 
         [Callback]
-        public void release_discovery_mode(string key) {
+        public void release_discovery_mode(string key) throws DBusError, IOError {
             bool old_state = this.discovery_mode_acquisitions.size==0;
 
             this.discovery_mode_acquisitions.remove(key);
@@ -216,7 +216,7 @@ namespace Gconnect.Core {
         }
 
         [Callback]
-        public void force_on_network_change() {
+        public void force_on_network_change() throws DBusError, IOError {
             debug("Sending onNetworkChange to %d LinkProviders.", this.link_providers.size);
             foreach (var lp in this.link_providers) {
                 lp.on_network_change();
@@ -234,7 +234,7 @@ namespace Gconnect.Core {
         }
 
         [Callback]
-        public string[] list_devices(bool only_reachable, bool only_paired) {
+        public string[] list_devices(bool only_reachable, bool only_paired) throws DBusError, IOError {
             string[] ret = {};
             foreach (var device in this.devices.values) {
                 if (only_reachable && !device.is_reachable()) continue;
@@ -285,14 +285,14 @@ namespace Gconnect.Core {
 
         }
 
-        public void set_announced_name(string name) {
+        public void set_announced_name(string name) throws DBusError, IOError {
             debug("Change announcing name.");
             this.config.device_name = name;
             this.force_on_network_change();
             this.announced_name_changed(name);
         }
 
-        public string get_announced_name() {
+        public string get_announced_name() throws DBusError, IOError {
             return this.config.device_name;
         }
 
@@ -302,7 +302,7 @@ namespace Gconnect.Core {
         }
 
         [Callback]
-        public string device_id_by_name(string name) {
+        public string device_id_by_name(string name) throws DBusError, IOError {
             foreach (var device in this.devices.values) {
                 if (device.name == name && device.is_paired()) {
                     return device.id;
@@ -341,7 +341,7 @@ namespace Gconnect.Core {
 //            device.reload_plugins();
         }
 
-        public string[] pairing_requests() {
+        public string[] pairing_requests() throws DBusError, IOError {
             string[] ret = {};
             foreach (var device in this.devices.values) {
                 if (device.has_pairing_requests()) {
@@ -351,7 +351,7 @@ namespace Gconnect.Core {
             return ret;
         }
 
-        public string self_id() {
+        public string self_id() throws DBusError, IOError {
             return this.config.device_id;
         }
 
@@ -380,7 +380,7 @@ namespace Gconnect.Core {
 
         /* should be a destructor, but '~Core()' never gets called? */
         [DBus (visible = false)]
-        public void close () {
+        public void close () throws DBusError, IOError {
             debug("Try to close DBus connection.");
             this.unpublish();
 

@@ -179,7 +179,7 @@ namespace Gconnect.DeviceManager {
         
 
         /* Public Methods */
-        public string dbus_path() { return "/modules/gconnect/devices/"+this.id; }
+        public string dbus_path() throws DBusError, IOError { return "/modules/gconnect/devices/"+this.id; }
         
         [DBus (visible = false)]
         public unowned DBusConnection dbus_connection() { return this.conn; }
@@ -238,7 +238,7 @@ namespace Gconnect.DeviceManager {
         }
 
         [DBus (visible = false)]
-        internal void remove_link(Connection.DeviceLink dl) {
+        internal void remove_link(Connection.DeviceLink dl) throws DBusError, IOError {
             device_links.remove(dl);
 
             debug("Remove link, %d links remaining.", device_links.size);
@@ -249,7 +249,7 @@ namespace Gconnect.DeviceManager {
             }
         }
 
-        public string[] available_links() {
+        public string[] available_links() throws DBusError, IOError {
             string[] sl = {};
             foreach (var dl in device_links) {
                 sl += dl.provider.name;
@@ -257,11 +257,11 @@ namespace Gconnect.DeviceManager {
             return sl;
         }
         
-        public bool is_paired() {
+        public bool is_paired() throws DBusError, IOError {
             return Config.Config.instance().is_paired(this.id);
         }
         
-        public bool is_reachable() {
+        public bool is_reachable() throws DBusError, IOError {
             return !device_links.is_empty;
         }
 
@@ -273,7 +273,7 @@ namespace Gconnect.DeviceManager {
 //         bool isPluginEnabled(const QString& pluginName) const;
 //         public string[] supported_plugins() { return supported_plugins.to_array(); }
 
-        public void clean_unneeded_links() {
+        public void clean_unneeded_links() throws DBusError, IOError {
             if (is_paired()) {
                 return;
             }
@@ -291,8 +291,11 @@ namespace Gconnect.DeviceManager {
         public virtual bool send_packet(NetworkProtocol.Packet pkt)
                 requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_PAIR)
                 requires (pkt.packet_type != NetworkProtocol.PACKET_TYPE_IDENTITY)
-                requires (is_paired())
         {
+            if (!is_paired()) {
+                message("Device %s is not paired, cannot send packet", info.name);
+                return false;
+            }
             // TODO: create a queue to send packet, otherwise, some packets are lost
             if (pkt.packet_type in info.incoming) {
                 foreach (var dl in device_links) {
@@ -305,7 +308,7 @@ namespace Gconnect.DeviceManager {
         }
 
         [Callback]
-        public void request_pair() { // to all links
+        public void request_pair() throws DBusError, IOError { // to all links
             if (is_paired()) {
                 this.pairing_error(_("Already paired"));
                 return;
@@ -322,7 +325,7 @@ namespace Gconnect.DeviceManager {
         }
         
         [Callback]
-        public void unpair() { // from all links
+        public void unpair() throws DBusError, IOError { // from all links
             debug("Device links attached to %s: %d", this.id, device_links.size);
             if (device_links.is_empty) {
                 warning("No device link to communicate with device.");
@@ -340,16 +343,16 @@ namespace Gconnect.DeviceManager {
             paired_changed(false);
         }
         
-        public void reload_plugins() {
+        public void reload_plugins() throws DBusError, IOError {
             deactivate_plugins();
             activate_plugins();
         }
         
-        private void activate_plugins() {
+        private void activate_plugins() throws DBusError, IOError {
             init_plugins();
         }
         
-        private void deactivate_plugins() {
+        private void deactivate_plugins() throws DBusError, IOError {
             if (extension_set != null) {
                 extension_set.@foreach((ext_set, info, extension) => {
                     (extension as Plugin.Plugin).deactivate();
@@ -360,7 +363,7 @@ namespace Gconnect.DeviceManager {
             plugins.clear();
         }
         
-        public void init_plugins() {
+        public void init_plugins() throws DBusError, IOError {
             debug("Preload plugin engine");
             var engine = Plugin.PluginManager.instance().engine;
             debug("Activate all available plugins for device %s.", this.id);
@@ -409,12 +412,12 @@ namespace Gconnect.DeviceManager {
         }
 
         [DBus (visible = false)]
-        public Plugin.PluginProxy? get_plugin(string name) {
+        public Plugin.PluginProxy? get_plugin(string name) throws DBusError, IOError {
             return plugins[name];
         }
 
         [Callback]
-        public void accept_pairing() {
+        public void accept_pairing() throws DBusError, IOError {
             debug("Pairing was accepted by user");
             bool res = false;
             foreach (var dl in device_links) {
@@ -426,7 +429,7 @@ namespace Gconnect.DeviceManager {
         }
 
         [Callback]
-        public void reject_pairing() {
+        public void reject_pairing() throws DBusError, IOError {
             debug("Pairing was rejected by user");
             bool res = false;
             foreach (var dl in device_links) {
@@ -438,7 +441,7 @@ namespace Gconnect.DeviceManager {
         }
         
         [Callback]
-        public bool has_pairing_requests() {
+        public bool has_pairing_requests() throws DBusError, IOError {
             foreach (var dl in device_links) {
                 if (dl.has_pairing_handler()) {
                     return true;
@@ -447,16 +450,16 @@ namespace Gconnect.DeviceManager {
             return false;
         }
 
-        public string icon_name() {
+        public string icon_name() throws DBusError, IOError {
             return icon_for_status(true, false);
         }
         
-        public string status_icon_name() {
+        public string status_icon_name() throws DBusError, IOError {
             return icon_for_status(is_reachable(), is_paired());
         }
         
         [DBus (visible = false)]
-        public void publish (DBusConnection conn) {
+        public void publish (DBusConnection conn) throws DBusError, IOError {
             this.conn = conn;
             try	{
                 string path = this.dbus_path();
@@ -469,7 +472,7 @@ namespace Gconnect.DeviceManager {
         }
 
         [DBus (visible = false)]
-        public void unpublish () throws IOError {
+        public void unpublish () throws DBusError, IOError {
             if (this.conn == null) {
                 return;
             }

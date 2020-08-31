@@ -48,7 +48,7 @@ namespace PluginsGconnect.Battery {
             request();
         }
 
-        public void request() {
+        public void request() throws DBusError, IOError {
             var pkt = new Gconnect.NetworkProtocol.Packet(PACKET_TYPE_REQUEST);
             pkt.set_bool("request", true);
             this.proxy.request(pkt);
