@@ -11,7 +11,7 @@ namespace PluginsGconnect.Battery {
 
         protected unowned DBusConnection dbus_connection;
         
-        public SimpleProxy(Gconnect.Plugin.PluginProxy proxy) {
+        protected SimpleProxy(Gconnect.Plugin.PluginProxy proxy) {
             this.proxy = proxy;
             this.name = proxy.name;
             this.proxy.received_packet.connect(receive);

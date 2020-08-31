@@ -56,7 +56,7 @@ namespace Gconnect.Connection {
         public signal void packet_received(NetworkProtocol.Packet pkt);
         public signal void forced_close();
 
-        public SocketConnectionLink() {
+        protected SocketConnectionLink() {
             this.cancel_link = new GLib.Cancellable();
             cancel_link.cancelled.connect((s)=> {
                 if (source_id > 0) {
@@ -211,7 +211,7 @@ namespace Gconnect.Connection {
         public signal void received_packet(NetworkProtocol.Packet np);
         public signal void destroyed(string device_id);
 
-        public DeviceLink(string id, LinkProvider parent)
+        protected DeviceLink(string id, LinkProvider parent)
                 requires (id != "")
         {
             this.device_id = id;
